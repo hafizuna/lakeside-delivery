@@ -1,0 +1,214 @@
+🎯 Final Optimized Prompt (with Database Schema)
+
+Role: You are an expert Flutter + React (TypeScript) developer and product designer specializing in food delivery apps.
+
+Context: I am building a food delivery startup with three actors: customers, restaurants, and drivers. I want a minimal viable product (MVP) that is functional, scalable, and follows the lean startup approach. The app design must match the modern, clean, food-focused UI similar to the screenshots provided — bold food images, soft rounded cards, minimal icons, clear wallet interface, and smooth navigation.
+
+The design style should use:
+
+Colors: Warm gradients (orange/yellow primary, white backgrounds, soft grays for contrast), accented with red/green for actions.
+
+UI Elements: Rounded corners (16–24px radius), card-based layouts, shadow depth for emphasis.
+
+Typography: Clean, readable sans-serif fonts (medium weight for headers, light for details).
+
+Animations: Smooth fade-ins, slide transitions, micro-interactions (button ripple, wallet count-up animation, icon bounce when adding to cart).
+
+Requirements
+Customer Role (Flutter app)
+
+Sign up / Login with phone + password.
+
+Browse restaurants, categories, menus.
+
+Place orders (cash only at MVP).
+
+Wallet balance shown (illusion wallet; manual top-ups).
+
+Loyalty points system (1 order = +1 point).
+
+Real-time GPS order tracking.
+
+Push notifications for order updates, promos, rewards.
+
+Restaurant Role (Flutter app)
+
+Sign up / Login.
+
+Manage menu items (CRUD).
+
+Accept / reject orders.
+
+Update order status (Preparing → Ready).
+
+View daily earnings (after commission).
+
+Driver Role (Flutter app)
+
+Sign up / Login.
+
+Receive nearest delivery requests (auto-assign or accept-first).
+
+Wallet balance & history.
+
+Wallet top-up requests (upload screenshot → admin approval).
+
+Live GPS sharing.
+
+Delivery workflow: Accept → Picked up → Delivered.
+
+Admin Dashboard (React + TypeScript)
+
+Manage customers, restaurants, drivers.
+
+Geofencing: define delivery zones.
+
+Assign / reassign drivers.
+
+Adjust driver wallet balances.
+
+Handle disputes & cancellations.
+
+Audit logs for admin actions.
+
+Analytics: daily orders, revenue, active drivers/restaurants.
+
+Delivery Fee Rules & Simulation:
+
+Manage delivery_fee_rules: base_fee, per_km_rate, min/max cap, rule_type (flat, distance, hybrid, zone).
+
+Assign rules per zone.
+
+Simulation tool: Admin enters pickup/drop → system calculates fee.
+
+Store rule history.
+
+📊 Database Schema (MySQL MVP)
+1. Users
+user_id (PK)
+name
+phone
+password_hash
+role ENUM('customer','driver','restaurant','admin')
+status ENUM('active','blocked','pending')
+created_at
+
+2. Drivers
+driver_id (PK, FK → users.user_id)
+vehicle_type ENUM('bike')
+current_lat DECIMAL(10,6)
+current_lng DECIMAL(10,6)
+is_available BOOLEAN
+wallet_balance DECIMAL(10,2)
+rating FLOAT
+
+3. Restaurants
+restaurant_id (PK, FK → users.user_id)
+name
+address
+lat DECIMAL(10,6)
+lng DECIMAL(10,6)
+geofence_zone_id (FK)
+commission_rate DECIMAL(5,2)
+status ENUM('open','closed','suspended')
+
+4. Menus
+menu_id (PK)
+restaurant_id (FK)
+item_name
+description
+price DECIMAL(10,2)
+image_url
+is_available BOOLEAN
+
+5. Orders
+order_id (PK)
+customer_id (FK → users.user_id)
+restaurant_id (FK)
+driver_id (FK → users.user_id, nullable)
+total_price DECIMAL(10,2)
+delivery_fee DECIMAL(10,2)
+commission DECIMAL(10,2)
+status ENUM('pending','accepted','preparing','picked_up','delivering','delivered','cancelled')
+created_at, updated_at
+
+6. OrderTracking
+tracking_id (PK)
+order_id (FK)
+driver_id (FK)
+lat DECIMAL(10,6)
+lng DECIMAL(10,6)
+timestamp
+
+7. WalletTransactions
+transaction_id (PK)
+driver_id (FK)
+amount DECIMAL(10,2)
+type ENUM('credit','debit','topup','commission')
+status ENUM('pending','approved','rejected')
+screenshot_url (nullable)
+admin_id (FK, nullable)
+timestamp
+
+8. Loyalty
+customer_id (FK → users.user_id)
+total_orders INT
+loyalty_points INT
+last_rewarded_at DATETIME
+
+9. Geofencing
+zone_id (PK)
+name
+polygon_coordinates JSON
+status ENUM('active','inactive')
+
+10. DeliveryFeeRules
+rule_id (PK)
+rule_type ENUM('flat','distance','zone','hybrid')
+base_fee DECIMAL(10,2)
+per_km_rate DECIMAL(10,2)
+min_fee DECIMAL(10,2)
+max_fee DECIMAL(10,2)
+zone_id (FK, nullable)
+active BOOLEAN
+created_at, updated_at
+
+11. AuditLogs
+log_id (PK)
+admin_id (FK → users.user_id)
+action VARCHAR(100)
+target_entity_id INT
+entity_type ENUM('driver','restaurant','order','wallet')
+details JSON
+timestamp
+
+12. SupportTickets (future-ready)
+ticket_id (PK)
+order_id (FK)
+customer_id (FK)
+driver_id (FK, nullable)
+restaurant_id (FK, nullable)
+issue_type ENUM('food','delivery','payment','other')
+status ENUM('open','resolved','closed')
+notes TEXT
+created_at, resolved_at
+
+Technical Notes
+
+Realtime GPS: Firebase RTDB for live updates, MySQL for history.
+
+Fee Calculation: Admin sets rule; system applies rule per order; customer sees fee before checkout; driver sees payout breakdown.
+
+Scalability: Start with MySQL + Haversine; migrate to PostGIS if needed.
+
+Task
+
+Generate a UI/UX design plan that matches screenshots’ aesthetics.
+
+Recommend Flutter widgets for UI.
+
+Suggest API endpoint structure for each role.
+
+Include Admin fee simulation UI + DB integration.
+
+Ensure the design applies the warm gradient + micro-interactions strategy.
