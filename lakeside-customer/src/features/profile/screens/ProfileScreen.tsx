@@ -183,7 +183,7 @@ const ProfileScreen: React.FC<ProfileScreenProps> = ({ navigation }) => {
 
         {/* Quick Actions */}
         <View style={styles.quickActions}>
-          <TouchableOpacity style={styles.actionButton}>
+          <TouchableOpacity style={styles.actionButton} onPress={() => navigation.navigate('NotificationSettingsScreen')}>
             <View style={styles.actionIcon}>
               <BellIcon size={24} color={Colors.primary.main} />
             </View>
@@ -215,10 +215,18 @@ const ProfileScreen: React.FC<ProfileScreenProps> = ({ navigation }) => {
             <BackIcon size={16} color={Colors.text.secondary} style={{ transform: [{ rotate: '180deg' }] }} />
           </TouchableOpacity>
 
-          <TouchableOpacity style={styles.menuItem} onPress={() => Alert.alert('Coming Soon', 'Address management feature coming soon!')}>
+          <TouchableOpacity style={styles.menuItem} onPress={() => navigation.navigate('SavedAddressesScreen')}>
             <View style={styles.menuLeft}>
               <MapIcon size={20} color={Colors.text.primary} />
               <Text style={styles.menuText}>Address Management</Text>
+            </View>
+            <BackIcon size={16} color={Colors.text.secondary} style={{ transform: [{ rotate: '180deg' }] }} />
+          </TouchableOpacity>
+
+          <TouchableOpacity style={styles.menuItem} onPress={() => navigation.navigate('NotificationSettingsScreen')}>
+            <View style={styles.menuLeft}>
+              <BellIcon size={20} color={Colors.text.primary} />
+              <Text style={styles.menuText}>Notification Settings</Text>
             </View>
             <BackIcon size={16} color={Colors.text.secondary} style={{ transform: [{ rotate: '180deg' }] }} />
           </TouchableOpacity>

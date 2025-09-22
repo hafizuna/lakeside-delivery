@@ -138,20 +138,20 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({ onRestaurantPress, onCar
         />
         <View style={styles.restaurantInfo}>
           <View style={styles.restaurantHeader}>
-            <Text style={styles.restaurantName} numberOfLines={1}>{item.name}</Text>
-            {item.rating && item.rating > 0 && (
+            <Text style={styles.restaurantName} numberOfLines={1}>{item.name || 'Unknown Restaurant'}</Text>
+            {item.rating && item.rating > 0 ? (
               <View style={styles.ratingContainer}>
                 <Star size={14} color="#FFD700" />
                 <Text style={styles.ratingText}>{item.rating.toFixed(1)}</Text>
               </View>
-            )}
+            ) : null}
           </View>
-          <Text style={styles.restaurantAddress} numberOfLines={1}>{item.address}</Text>
+          <Text style={styles.restaurantAddress} numberOfLines={1}>{item.address || 'Address not available'}</Text>
           <View style={styles.restaurantMeta}>
             <Text style={styles.restaurantDistance}>{calculateDistance(item.lat, item.lng)} km away</Text>
-            {item.totalOrders && item.totalOrders > 0 && (
+            {item.totalOrders && item.totalOrders > 0 ? (
               <Text style={styles.orderCount}>• {item.totalOrders} orders</Text>
-            )}
+            ) : null}
           </View>
         </View>
       </TouchableOpacity>

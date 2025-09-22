@@ -12,7 +12,7 @@ interface ErrorMessageProps {
 const ErrorMessage: React.FC<ErrorMessageProps> = ({ message, onRetry, style }) => {
   return (
     <View style={[styles.container, style]}>
-      <Ionicons name="alert-circle" size={48} color={Colors.error} />
+      <Ionicons name="alert-circle" size={48} color={Colors.action.error} />
       <Text style={styles.title}>Oops! Something went wrong</Text>
       <Text style={styles.message}>{message}</Text>
       
@@ -31,20 +31,20 @@ const styles = StyleSheet.create({
     flex: 1,
     justifyContent: 'center',
     alignItems: 'center',
-    backgroundColor: Colors.background,
+    backgroundColor: Colors.background.primary,
     paddingHorizontal: 20,
   },
   title: {
     fontSize: 20,
     fontWeight: 'bold',
-    color: Colors.text,
+    color: Colors.text.primary,
     marginTop: 16,
     marginBottom: 8,
     textAlign: 'center',
   },
   message: {
     fontSize: 16,
-    color: Colors.textSecondary,
+    color: Colors.text.secondary,
     textAlign: 'center',
     lineHeight: 24,
     marginBottom: 24,

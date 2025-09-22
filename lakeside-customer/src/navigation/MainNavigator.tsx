@@ -7,6 +7,8 @@ import CheckoutScreen from '../features/cart/screens/CheckoutScreen';
 import OrdersScreen from '../features/orders/screens/OrdersScreen';
 import OrderDetailScreen from '../features/orders/screens/OrderDetailScreen';
 import ProfileScreen from '../features/profile/screens/ProfileScreen';
+import SavedAddressesScreen from '../features/profile/screens/SavedAddressesScreen';
+import NotificationSettingsScreen from '../features/profile/screens/NotificationSettingsScreen';
 import PaymentMethodsScreen from '../features/wallet/screens/PaymentMethodsScreen';
 import WalletScreen from '../features/wallet/screens/WalletScreen';
 import TopUpScreen from '../features/wallet/screens/TopUpScreen';
@@ -17,7 +19,7 @@ import { useCart } from '../features/cart/context/CartContext';
 
 export const MainNavigator: React.FC = () => {
   const [activeTab, setActiveTab] = useState<TabName>('Home');
-  const [currentScreen, setCurrentScreen] = useState<'home' | 'restaurant-detail' | 'cart' | 'checkout' | 'orders' | 'order-detail' | 'profile' | 'payment-methods' | 'wallet' | 'topup' | 'transaction-history'>('home');
+  const [currentScreen, setCurrentScreen] = useState<'home' | 'restaurant-detail' | 'cart' | 'checkout' | 'orders' | 'order-detail' | 'profile' | 'saved-addresses' | 'notification-settings' | 'payment-methods' | 'wallet' | 'topup' | 'transaction-history'>('home');
   const [selectedRestaurant, setSelectedRestaurant] = useState<number | null>(null);
   const [selectedOrderId, setSelectedOrderId] = useState<number | null>(null);
   const { state } = useCart();
@@ -119,6 +121,10 @@ export const MainNavigator: React.FC = () => {
               setCurrentScreen('home');
             } else if (screen === 'PaymentMethodsScreen') {
               setCurrentScreen('payment-methods');
+            } else if (screen === 'SavedAddressesScreen') {
+              setCurrentScreen('saved-addresses');
+            } else if (screen === 'NotificationSettingsScreen') {
+              setCurrentScreen('notification-settings');
             }
           },
           goBack: () => {
@@ -126,6 +132,22 @@ export const MainNavigator: React.FC = () => {
             setCurrentScreen('home');
           },
           canGoBack: () => true
+        }} />;
+      case 'saved-addresses':
+        return <SavedAddressesScreen navigation={{
+          navigate: (screen: string, params?: any) => {
+            // Handle navigation from saved addresses if needed
+            console.log('Navigate from SavedAddresses:', screen, params);
+          },
+          goBack: () => setCurrentScreen('profile')
+        }} />;
+      case 'notification-settings':
+        return <NotificationSettingsScreen navigation={{
+          navigate: (screen: string, params?: any) => {
+            // Handle navigation from notification settings if needed
+            console.log('Navigate from NotificationSettings:', screen, params);
+          },
+          goBack: () => setCurrentScreen('profile')
         }} />;
       case 'payment-methods':
         return <PaymentMethodsScreen navigation={{

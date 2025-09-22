@@ -28,6 +28,8 @@ import {
 } from '../../../shared/components/CustomIcons';
 import LoadingSpinner from '../../../shared/components/LoadingSpinner';
 import ErrorMessage from '../../../shared/components/ErrorMessage';
+import { useWalletTransactions } from '../hooks/useWalletTransactions';
+import { useNotifications } from '../../../shared/context/NotificationContext';
 
 interface Wallet {
   balance: string | number; // API returns as string (Decimal from database)
@@ -63,6 +65,12 @@ const WalletScreen: React.FC = ({ navigation }: any) => {
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  
+  // Monitor wallet transactions for notifications
+  useWalletTransactions({ enabled: true, pollingInterval: 30000 });
+  
+  // Get notification functions
+  const { checkAndNotifyLowBalance } = useNotifications();
 
   const fetchWallet = async () => {
     try {
@@ -71,9 +79,18 @@ const WalletScreen: React.FC = ({ navigation }: any) => {
       // Fetch wallet data
       const walletResponse = await walletAPI.getWallet();
       if (walletResponse.success) {
-        setWallet(walletResponse.data);
+        const walletData = walletResponse.data;
+        setWallet(walletData);
+        
+        // Check for low balance and notify if needed
+        const balance = typeof walletData.balance === 'string' 
+          ? parseFloat(walletData.balance) 
+          : walletData.balance;
+        await checkAndNotifyLowBalance(balance);
       } else {
-        setWallet({ balance: 998.00, totalTopUps: 1200, totalSpent: 202, isActive: true });
+        const mockWallet = { balance: 998.00, totalTopUps: 1200, totalSpent: 202, isActive: true };
+        setWallet(mockWallet);
+        await checkAndNotifyLowBalance(mockWallet.balance);
       }
       
       // Fetch recent transactions (first 5)

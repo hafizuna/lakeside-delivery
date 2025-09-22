@@ -224,7 +224,7 @@ export const CartIcon: React.FC<IconProps & { count?: number }> = ({ size = 24, 
       <>
         <Circle cx="19" cy="5" r="4" fill="#DC143C"/>
         <SvgText x="19" y="8" textAnchor="middle" fill="white" fontSize="8" fontWeight="bold">
-          {count > 99 ? '99+' : count}
+          {count > 99 ? '99+' : String(count)}
         </SvgText>
       </>
     )}
@@ -764,5 +764,37 @@ export const ImageIcon: React.FC<IconProps> = ({ size = 24, color = '#FF6B35' })
     <Rect x="3" y="3" width="18" height="18" rx="2" ry="2" fill="none" stroke="url(#imageGradient)" strokeWidth="2"/>
     <Circle cx="8.5" cy="8.5" r="1.5" fill="url(#imageGradient)"/>
     <Path d="M21 15l-5-5L5 21" stroke="url(#imageGradient)" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+  </Svg>
+);
+
+export const WorkIcon: React.FC<IconProps> = ({ size = 24, color = '#FF6B35' }) => (
+  <Svg width={size} height={size} viewBox="0 0 24 24" fill="none">
+    <Defs>
+      <LinearGradient id="workGradient" x1="0%" y1="0%" x2="100%" y2="100%">
+        <Stop offset="0%" stopColor="#2196F3" />
+        <Stop offset="100%" stopColor="#1976D2" />
+      </LinearGradient>
+    </Defs>
+    <Rect x="2" y="7" width="20" height="14" rx="2" ry="2" fill="url(#workGradient)"/>
+    <Path d="M16 21V5a2 2 0 00-2-2h-4a2 2 0 00-2 2v16" fill="none" stroke="#FFF" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+    <Circle cx="12" cy="14" r="2" fill="#FFF"/>
+    <Path d="M7 11h10" stroke="#FFF" strokeWidth="1" strokeLinecap="round"/>
+    <Path d="M7 17h10" stroke="#FFF" strokeWidth="1" strokeLinecap="round"/>
+  </Svg>
+);
+
+export const LocationIcon: React.FC<IconProps> = ({ size = 24, color = '#FF6B35' }) => (
+  <Svg width={size} height={size} viewBox="0 0 24 24" fill="none">
+    <Defs>
+      <LinearGradient id="locationGradient" x1="0%" y1="0%" x2="100%" y2="100%">
+        <Stop offset="0%" stopColor="#FF8A65" />
+        <Stop offset="100%" stopColor={color} />
+      </LinearGradient>
+    </Defs>
+    <Path
+      d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0118 0z"
+      fill="url(#locationGradient)"
+    />
+    <Circle cx="12" cy="10" r="3" fill="#FFF"/>
   </Svg>
 );

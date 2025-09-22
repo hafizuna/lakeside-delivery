@@ -26,12 +26,12 @@ const styles = StyleSheet.create({
     flex: 1,
     justifyContent: 'center',
     alignItems: 'center',
-    backgroundColor: Colors.background,
+    backgroundColor: Colors.background.primary,
   },
   message: {
     marginTop: 12,
     fontSize: 16,
-    color: Colors.textSecondary,
+    color: Colors.text.secondary,
     textAlign: 'center',
   },
 });

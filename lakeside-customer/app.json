@@ -6,7 +6,9 @@
     "orientation": "portrait",
     "icon": "./assets/icon.png",
     "userInterfaceStyle": "light",
-    "newArchEnabled": true,
+    "newArchEnabled": false,
+    "owner": "lakeside-delivery",
+    "projectId": "lakeside-customer-dev",
     "splash": {
       "image": "./assets/splash-icon.png",
       "resizeMode": "contain",
@@ -16,6 +18,13 @@
       "supportsTablet": true,
       "config": {
         "googleMapsApiKey": "YOUR_GOOGLE_MAPS_API_KEY_IOS"
+      },
+      "infoPlist": {
+        "NSLocationWhenInUseUsageDescription": "This app needs access to your location to show nearby restaurants and calculate delivery distances.",
+        "NSLocationAlwaysAndWhenInUseUsageDescription": "This app needs access to your location to provide accurate delivery services."
+      },
+      "notification": {
+        "requestPermissionsAtLaunch": true
       }
     },
     "android": {
@@ -24,14 +33,35 @@
         "backgroundColor": "#ffffff"
       },
       "edgeToEdgeEnabled": true,
+      "permissions": [
+        "ACCESS_COARSE_LOCATION",
+        "ACCESS_FINE_LOCATION"
+      ],
       "config": {
         "googleMaps": {
           "apiKey": "YOUR_GOOGLE_MAPS_API_KEY_ANDROID"
         }
+      },
+      "notification": {
+        "icon": "./assets/notification-icon.png",
+        "color": "#000000"
       }
     },
     "web": {
       "favicon": "./assets/favicon.png"
-    }
+    },
+    "notification": {
+      "icon": "./assets/notification-icon.png"
+    },
+    "plugins": [
+      [
+        "expo-notifications",
+        {
+          "icon": "./assets/notification-icon.png",
+          "color": "#ffffff",
+          "sounds": ["./assets/notification.wav"]
+        }
+      ]
+    ]
   }
 }

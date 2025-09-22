@@ -10,12 +10,28 @@ import {
 } from 'react-native';
 import { Store, MessageCircle } from 'lucide-react-native';
 import { BackIcon, CheckIcon, CreditCardIcon, CashIcon, WalletIcon, MapIcon, ClockIcon } from '../../../shared/components/CustomIcons';
+import MapAddressPicker from '../../../shared/components/MapAddressPicker';
 import { Colors } from '../../../shared/theme/colors';
 import { useCart } from '../context/CartContext';
 import { orderAPI, walletAPI } from '../../../shared/services/api';
 import { PaymentMethod } from '../../../shared/types/Order';
 import { useToast } from '../../../shared/context/ToastContext';
+import { useLocation } from '../../../shared/context/LocationContext';
+import { LocationCoordinates } from '../../../shared/services/locationService';
 import { useNavigation } from '@react-navigation/native';
+
+// Helper function to calculate distance between two coordinates using Haversine formula
+const calculateDistanceKm = (coord1: LocationCoordinates, coord2: LocationCoordinates): number => {
+  const R = 6371; // Radius of the Earth in km
+  const dLat = (coord2.latitude - coord1.latitude) * Math.PI / 180;
+  const dLon = (coord2.longitude - coord1.longitude) * Math.PI / 180;
+  const a = 
+    Math.sin(dLat / 2) * Math.sin(dLat / 2) +
+    Math.cos(coord1.latitude * Math.PI / 180) * Math.cos(coord2.latitude * Math.PI / 180) *
+    Math.sin(dLon / 2) * Math.sin(dLon / 2);
+  const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+  return R * c; // Distance in km
+};
 
 interface CheckoutScreenProps {
   onBackPress: () => void;
@@ -28,14 +44,17 @@ interface CheckoutScreenProps {
 const CheckoutScreen: React.FC<CheckoutScreenProps> = ({ onBackPress, onOrderComplete, navigation: customNavigation }) => {
   const { state, clearCart } = useCart();
   const { showSuccess, showError, showWarning } = useToast();
+  const { calculateDistance } = useLocation();
   const reactNavigation = useNavigation();
   const [deliveryAddress, setDeliveryAddress] = useState('');
+  const [deliveryCoordinates, setDeliveryCoordinates] = useState<LocationCoordinates | null>(null);
   const [paymentMethod, setPaymentMethod] = useState<PaymentMethod>(PaymentMethod.CARD);
   const [specialInstructions, setSpecialInstructions] = useState('');
   const [isProcessing, setIsProcessing] = useState(false);
   const [walletBalance, setWalletBalance] = useState<number>(0);
   const [walletLoading, setWalletLoading] = useState(true);
   const [walletError, setWalletError] = useState<string | null>(null);
+  const [deliveryFeeCalculated, setDeliveryFeeCalculated] = useState<number>(5.00);
 
   // Fetch wallet balance on component mount
   useEffect(() => {
@@ -69,8 +88,8 @@ const CheckoutScreen: React.FC<CheckoutScreenProps> = ({ onBackPress, onOrderCom
   };
 
   const handlePlaceOrder = async () => {
-    if (!deliveryAddress.trim()) {
-      showWarning('Missing Address', 'Please enter your delivery address to continue.');
+    if (!deliveryAddress.trim() || !deliveryCoordinates) {
+      showWarning('Missing Address', 'Please select your delivery address to continue.');
       return;
     }
 
@@ -81,7 +100,7 @@ const CheckoutScreen: React.FC<CheckoutScreenProps> = ({ onBackPress, onOrderCom
 
     // Check wallet balance if wallet payment is selected
     if (paymentMethod === PaymentMethod.WALLET) {
-      const totalAmount = state.total + 5.00; // Include delivery fee
+      const totalAmount = state.subtotal + deliveryFeeCalculated;
       if (walletBalance < totalAmount) {
         showWarning(
           'Insufficient Wallet Balance', 
@@ -105,11 +124,11 @@ const CheckoutScreen: React.FC<CheckoutScreenProps> = ({ onBackPress, onOrderCom
           quantity: item.quantity,
           price: item.price
         })),
-        totalPrice: state.total + 5.00, // Add delivery fee
-        deliveryFee: 5.00,
+        totalPrice: state.subtotal + deliveryFeeCalculated,
+        deliveryFee: deliveryFeeCalculated,
         deliveryAddress,
-        deliveryLat: dummyCoordinates.latitude, // Default coordinates
-        deliveryLng: dummyCoordinates.longitude,
+        deliveryLat: deliveryCoordinates!.latitude,
+        deliveryLng: deliveryCoordinates!.longitude,
         deliveryInstructions: specialInstructions,
         paymentMethod: paymentMethod
       };
@@ -146,6 +165,23 @@ const CheckoutScreen: React.FC<CheckoutScreenProps> = ({ onBackPress, onOrderCom
     }
   };
 
+  const handleAddressSelect = (address: string, coordinates: LocationCoordinates) => {
+    setDeliveryAddress(address);
+    setDeliveryCoordinates(coordinates);
+    
+    // Calculate delivery fee based on distance (mock restaurant location)
+    const restaurantCoordinates: LocationCoordinates = {
+      latitude: 9.052232,
+      longitude: 38.115485
+    };
+    
+    const distance = calculateDistanceKm(restaurantCoordinates, coordinates);
+    const baseFee = 2.50;
+    const perKmFee = 1.00;
+    const calculatedFee = baseFee + (distance * perKmFee);
+    setDeliveryFeeCalculated(Math.round(calculatedFee * 100) / 100);
+  };
+
   const renderOrderSummary = () => (
     <View style={styles.section}>
       <Text style={styles.sectionTitle}>Order Summary</Text>
@@ -172,12 +208,12 @@ const CheckoutScreen: React.FC<CheckoutScreenProps> = ({ onBackPress, onOrderCom
       
       <View style={styles.summaryRow}>
         <Text style={styles.summaryLabel}>Delivery Fee</Text>
-        <Text style={styles.summaryValue}>${state.deliveryFee.toFixed(2)}</Text>
+        <Text style={styles.summaryValue}>${deliveryFeeCalculated.toFixed(2)}</Text>
       </View>
       
       <View style={[styles.summaryRow, styles.totalRow]}>
         <Text style={styles.totalLabel}>Total</Text>
-        <Text style={styles.totalValue}>${state.total.toFixed(2)}</Text>
+        <Text style={styles.totalValue}>${(state.subtotal + deliveryFeeCalculated).toFixed(2)}</Text>
       </View>
     </View>
   );
@@ -186,25 +222,18 @@ const CheckoutScreen: React.FC<CheckoutScreenProps> = ({ onBackPress, onOrderCom
     <View style={styles.section}>
       <Text style={styles.sectionTitle}>Delivery Address</Text>
       
-      {/* Address Input */}
-      <View style={styles.inputContainer}>
-        <MapIcon size={20} color={Colors.text.secondary} />
-        <TextInput
-          style={styles.textInput}
-          placeholder="Enter your full delivery address (e.g., 123 Main St, City, State, ZIP)"
-          value={deliveryAddress}
-          onChangeText={setDeliveryAddress}
-          multiline
-          placeholderTextColor={Colors.text.placeholder}
-        />
-      </View>
+      <MapAddressPicker
+        initialAddress={deliveryAddress}
+        onAddressSelect={handleAddressSelect}
+        placeholder="Select your delivery address on the map"
+      />
       
-      {/* Address Helper Text */}
-      <View style={styles.addressHelper}>
-        <Text style={styles.addressHelperText}>
-          📍 Please provide your complete address including street, city, and any landmarks for accurate delivery.
-        </Text>
-      </View>
+      {deliveryAddress ? (
+        <View style={styles.selectedAddressContainer}>
+          <MapIcon size={16} color={Colors.success} />
+          <Text style={styles.selectedAddressText}>{deliveryAddress}</Text>
+        </View>
+      ) : null}
     </View>
   );
 
@@ -338,7 +367,7 @@ const CheckoutScreen: React.FC<CheckoutScreenProps> = ({ onBackPress, onOrderCom
             ) : (
               <>
                 <Text style={styles.orderButtonText}>Place Order</Text>
-                <Text style={styles.orderButtonPrice}>${state.total.toFixed(2)}</Text>
+                <Text style={styles.orderButtonPrice}>${(state.subtotal + deliveryFeeCalculated).toFixed(2)}</Text>
               </>
             )}
           </View>
@@ -571,6 +600,27 @@ const styles = StyleSheet.create({
     color: Colors.text.white,
     fontSize: 16,
     fontWeight: '700',
+  },
+  mapAddressContainer: {
+    marginBottom: 12,
+  },
+  selectedAddressContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: Colors.success + '10',
+    borderColor: Colors.success,
+    borderWidth: 1,
+    borderRadius: 8,
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    marginTop: 8,
+  },
+  selectedAddressText: {
+    fontSize: 14,
+    color: Colors.success,
+    fontWeight: '500',
+    marginLeft: 8,
+    flex: 1,
   },
 });
 
