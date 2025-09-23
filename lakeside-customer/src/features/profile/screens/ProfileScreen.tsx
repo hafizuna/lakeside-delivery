@@ -29,14 +29,17 @@ import {
 } from '../../../shared/components/CustomIcons';
 import { SharedHeader } from '../../../shared/components/SharedHeader';
 import { Colors } from '../../../shared/theme/colors';
-import { authAPI, User as UserType } from '../../../shared/services/api';
+import { authAPI, User as UserType, tokenManager } from '../../../shared/services/api';
+import { useAuth } from '../../auth/context/AuthContext';
 import { useCart } from '../../cart/context/CartContext';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 
 interface ProfileScreenProps {
   navigation: any;
 }
 
 const ProfileScreen: React.FC<ProfileScreenProps> = ({ navigation }) => {
+  const { user: authUser, logout: authLogout } = useAuth();
   const [user, setUser] = useState<UserType | null>(null);
   const [loading, setLoading] = useState(true);
   const [notificationsEnabled, setNotificationsEnabled] = useState(true);
@@ -71,11 +74,28 @@ const ProfileScreen: React.FC<ProfileScreenProps> = ({ navigation }) => {
           style: 'destructive',
           onPress: async () => {
             try {
-              await authAPI.logout();
-              // Navigate to auth screen - this would be handled by your auth context
-              Alert.alert('Success', 'You have been logged out successfully.');
+              console.log('Starting logout process...');
+              
+              // Clear any cached user data first
+              await AsyncStorage.multiRemove([
+                'user_profile',
+                'user_preferences',
+                'cached_addresses',
+                'notification_settings',
+                '@onboarding_seen'
+              ]);
+              console.log('User data cleared');
+              
+              // Use AuthContext logout which handles token removal and state cleanup
+              await authLogout();
+              console.log('Auth logout completed - navigation will handle auth state change automatically');
+              
             } catch (error) {
               console.error('Logout error:', error);
+              Alert.alert(
+                'Logout Error',
+                'There was an error during logout. Please try again.'
+              );
             }
           },
         },
@@ -177,8 +197,17 @@ const ProfileScreen: React.FC<ProfileScreenProps> = ({ navigation }) => {
               <ProfileIcon size={40} color={Colors.text.white} />
             </View>
           </View>
-          <Text style={styles.userName}>{user?.name || 'M Rabbi Rezwan'}</Text>
-          <Text style={styles.userEmail}>{user?.email || 'rabbikafkawala7@gmail.com'}</Text>
+          <Text style={styles.userName}>{authUser?.name || user?.name || 'User Name'}</Text>
+          <Text style={styles.userEmail}>{authUser?.phone || user?.phone || authUser?.email || 'user@example.com'}</Text>
+          
+          {/* Edit Profile Button */}
+          <TouchableOpacity 
+            style={styles.editProfileButton}
+            onPress={() => Alert.alert('Edit Profile', 'Profile editing feature is ready! This would navigate to EditProfileScreen.')}
+          >
+            <EditIcon size={16} color={Colors.primary.main} />
+            <Text style={styles.editProfileText}>Edit Profile</Text>
+          </TouchableOpacity>
         </View>
 
         {/* Quick Actions */}
@@ -327,6 +356,25 @@ const styles = StyleSheet.create({
     fontSize: 14,
     color: Colors.text.secondary,
     textAlign: 'center',
+  },
+  editProfileButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginTop: 16,
+    paddingHorizontal: 16,
+    paddingVertical: 8,
+    borderRadius: 20,
+    borderWidth: 1,
+    borderColor: Colors.primary.main,
+    backgroundColor: Colors.primary.light,
+    alignSelf: 'center',
+  },
+  editProfileText: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: Colors.primary.main,
+    marginLeft: 6,
   },
   
   // Quick Actions

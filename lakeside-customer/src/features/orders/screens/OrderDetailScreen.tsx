@@ -25,6 +25,9 @@ import { orderAPI } from '../../../shared/services/api';
 import OrderStatusProgress from '../components/OrderStatusProgress';
 import { useOrderUpdates } from '../hooks/useOrderUpdates';
 import { useToast } from '../../../shared/context/ToastContext';
+import Rating, { RatingData } from '../../../shared/components/Rating';
+import { ratingAPI } from '../../../shared/services/api';
+import { Modal } from 'react-native';
 
 interface OrderDetailScreenProps {
   orderId: number;
@@ -42,6 +45,11 @@ const OrderDetailScreen: React.FC<OrderDetailScreenProps> = ({ orderId, onBackPr
   
   // Timer state for estimated delivery countdown
   const [timer, setTimer] = useState(1500); // 25 minutes in seconds
+  
+  // Rating state
+  const [showRatingModal, setShowRatingModal] = useState(false);
+  const [ratingType, setRatingType] = useState<'restaurant' | 'order'>('order');
+  const [isSubmittingRating, setIsSubmittingRating] = useState(false);
 
   useEffect(() => {
     if (error) {
@@ -193,6 +201,39 @@ const OrderDetailScreen: React.FC<OrderDetailScreenProps> = ({ orderId, onBackPr
   };
 
   const canCancel = order && (order.status === OrderStatus.PENDING || order.status === OrderStatus.ACCEPTED);
+  const canRate = order && order.status === OrderStatus.DELIVERED;
+  const isCompleted = order && (order.status === OrderStatus.DELIVERED || order.status === OrderStatus.CANCELLED);
+
+  const handleRateOrder = () => {
+    setRatingType('order');
+    setShowRatingModal(true);
+  };
+
+  const handleRateRestaurant = () => {
+    setRatingType('restaurant');
+    setShowRatingModal(true);
+  };
+
+  const handleRatingSubmit = async (ratingData: RatingData) => {
+    if (!order) return;
+
+    setIsSubmittingRating(true);
+    try {
+      if (ratingType === 'restaurant') {
+        await ratingAPI.rateRestaurant(order.restaurant.id, ratingData.rating, ratingData.comment);
+        showSuccess('Rating Submitted', 'Thank you for rating the restaurant!');
+      } else {
+        await ratingAPI.rateOrder(order.id, ratingData.rating, ratingData.comment);
+        showSuccess('Rating Submitted', 'Thank you for rating your order!');
+      }
+      setShowRatingModal(false);
+    } catch (error) {
+      console.error('Error submitting rating:', error);
+      showError('Rating Failed', 'Unable to submit rating. Please try again.');
+    } finally {
+      setIsSubmittingRating(false);
+    }
+  };
 
   if (loading) {
     return (
@@ -233,50 +274,66 @@ const OrderDetailScreen: React.FC<OrderDetailScreenProps> = ({ orderId, onBackPr
       </View>
       
       <ScrollView style={styles.content} showsVerticalScrollIndicator={false}>
-        {/* Order Status Display */}
-        <View style={styles.statusContainer}>
-          <Text style={styles.statusTitle}>📦 Order Status</Text>
-          <View style={styles.statusRow}>
-            {getStatusIcon(order.status)}
-            <Text style={styles.statusMainText}>{getStatusText(order.status)}</Text>
-          </View>
-          <Text style={styles.statusDescription}>{getStatusDescription(order.status)}</Text>
-          
-          {/* Address Information */}
-          <View style={styles.addressInfo}>
-            <Text style={styles.addressLabel}>📍 From: {order.restaurant?.name || 'Restaurant'}</Text>
-            <Text style={styles.addressText}>{order.restaurant?.address || 'Restaurant Address'}</Text>
-            <Text style={styles.addressLabel}>🏠 To: Delivery Address</Text>
-            <Text style={styles.addressText}>{order.deliveryAddress || 'Your Address'}</Text>
-          </View>
-          
-          {/* Driver Information */}
-          {order.driver && (
-            <View style={styles.driverInfo}>
-              <Text style={styles.driverLabel}>🚗 Driver: {order.driver.name}</Text>
-              <Text style={styles.driverDetails}>{order.driver.vehicleType || 'Bike'} • 4.8⭐</Text>
-              <TouchableOpacity style={styles.callDriverButton}>
-                <PhoneIcon size={20} color={Colors.primary.main} />
-                <Text style={styles.callDriverText}>Call Driver</Text>
-              </TouchableOpacity>
+        {isCompleted ? (
+          /* Minimalistic View for Completed Orders */
+          <View style={styles.completedOrderContainer}>
+            <View style={[styles.completedStatusBadge, { backgroundColor: getStatusColor(order.status) }]}>
+              {getStatusIcon(order.status)}
+              <Text style={styles.completedStatusText}>{getStatusText(order.status)}</Text>
             </View>
-          )}
-          
-          {/* Timer */}
-          <View style={styles.timerContainer}>
-            <ClockIcon size={20} color={Colors.primary.main} />
-            <Text style={styles.timerText}>Estimated: {formatTime(timer)}</Text>
+            
+            <Text style={styles.completedDate}>
+              {order.status === OrderStatus.DELIVERED ? 'Delivered' : 'Cancelled'} on {formatDate(order.updatedAt || order.createdAt)}
+            </Text>
           </View>
-        </View>
-        
-        {/* Order Progress */}
-        <View style={styles.section}>
-          <OrderStatusProgress 
-            status={order.status}
-            estimatedDelivery={order.estimatedDelivery}
-            showMap={false}
-          />
-        </View>
+        ) : (
+          /* Full Tracking View for Active Orders */
+          <>
+            <View style={styles.statusContainer}>
+              <Text style={styles.statusTitle}>📦 Order Status</Text>
+              <View style={styles.statusRow}>
+                {getStatusIcon(order.status)}
+                <Text style={styles.statusMainText}>{getStatusText(order.status)}</Text>
+              </View>
+              <Text style={styles.statusDescription}>{getStatusDescription(order.status)}</Text>
+              
+              {/* Address Information */}
+              <View style={styles.addressInfo}>
+                <Text style={styles.addressLabel}>📍 From: {order.restaurant?.name || 'Restaurant'}</Text>
+                <Text style={styles.addressText}>{order.restaurant?.address || 'Restaurant Address'}</Text>
+                <Text style={styles.addressLabel}>🏠 To: Delivery Address</Text>
+                <Text style={styles.addressText}>{order.deliveryAddress || 'Your Address'}</Text>
+              </View>
+              
+              {/* Driver Information */}
+              {order.driver && (
+                <View style={styles.driverInfo}>
+                  <Text style={styles.driverLabel}>🚗 Driver: {order.driver.name}</Text>
+                  <Text style={styles.driverDetails}>{order.driver.vehicleType || 'Bike'} • 4.8⭐</Text>
+                  <TouchableOpacity style={styles.callDriverButton}>
+                    <PhoneIcon size={20} color={Colors.primary.main} />
+                    <Text style={styles.callDriverText}>Call Driver</Text>
+                  </TouchableOpacity>
+                </View>
+              )}
+              
+              {/* Timer */}
+              <View style={styles.timerContainer}>
+                <ClockIcon size={20} color={Colors.primary.main} />
+                <Text style={styles.timerText}>Estimated: {formatTime(timer)}</Text>
+              </View>
+            </View>
+            
+            {/* Order Progress */}
+            <View style={styles.section}>
+              <OrderStatusProgress 
+                status={order.status}
+                estimatedDelivery={order.estimatedDelivery}
+                showMap={false}
+              />
+            </View>
+          </>
+        )}
         
         {/* Order Details */}
         <View style={styles.section}>
@@ -346,7 +403,46 @@ const OrderDetailScreen: React.FC<OrderDetailScreenProps> = ({ orderId, onBackPr
             </TouchableOpacity>
           </View>
         )}
+        
+        {/* Rating Buttons for Delivered Orders */}
+        {canRate && (
+          <View style={styles.section}>
+            <Text style={styles.sectionTitle}>Rate Your Experience</Text>
+            <View style={styles.ratingButtonsContainer}>
+              <TouchableOpacity style={styles.ratingButton} onPress={handleRateOrder}>
+                <StarIcon size={20} color={Colors.primary.main} />
+                <Text style={styles.ratingButtonText}>Rate Order</Text>
+              </TouchableOpacity>
+              
+              <TouchableOpacity style={styles.ratingButton} onPress={handleRateRestaurant}>
+                <StarIcon size={20} color={Colors.primary.main} />
+                <Text style={styles.ratingButtonText}>Rate Restaurant</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        )}
       </ScrollView>
+      
+      {/* Rating Modal */}
+      <Modal
+        visible={showRatingModal}
+        transparent
+        animationType="slide"
+        onRequestClose={() => setShowRatingModal(false)}
+      >
+        <View style={styles.modalOverlay}>
+          <Rating
+            title={ratingType === 'restaurant' ? 'Rate Restaurant' : 'Rate Your Order'}
+            subtitle={ratingType === 'restaurant' 
+              ? `How was your experience with ${order?.restaurant?.name || 'this restaurant'}?`
+              : 'How was your order experience?'
+            }
+            onRatingSubmit={handleRatingSubmit}
+            onCancel={() => setShowRatingModal(false)}
+            isLoading={isSubmittingRating}
+          />
+        </View>
+      </Modal>
     </SafeAreaView>
   );
 };
@@ -897,6 +993,66 @@ const styles = StyleSheet.create({
     color: Colors.text.primary,
     textAlign: 'center',
     paddingVertical: 20,
+  },
+  
+  // Rating styles
+  ratingButtonsContainer: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    gap: 12,
+  },
+  ratingButton: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 14,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: Colors.primary.main,
+    backgroundColor: Colors.primary.light,
+    gap: 8,
+  },
+  ratingButtonText: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: Colors.primary.main,
+  },
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0, 0, 0, 0.5)',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  // Completed Order Minimalistic Styles
+  completedOrderContainer: {
+    alignItems: 'center',
+    paddingVertical: 40,
+    paddingHorizontal: 20,
+    backgroundColor: Colors.background.primary,
+    marginHorizontal: 16,
+    marginTop: 8,
+    borderRadius: 16,
+  },
+  completedStatusBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 20,
+    paddingVertical: 12,
+    borderRadius: 25,
+    marginBottom: 16,
+  },
+  completedStatusText: {
+    fontSize: 18,
+    fontWeight: '700',
+    color: Colors.text.white,
+    marginLeft: 8,
+  },
+  completedDate: {
+    fontSize: 16,
+    color: Colors.text.secondary,
+    textAlign: 'center',
+    marginBottom: 20,
   },
 });
 

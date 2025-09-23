@@ -39,9 +39,19 @@ const initialState: CartState = {
   total: 0,
 };
 
+// Utility function to safely convert price to number
+const safePrice = (price: any): number => {
+  if (price == null) return 0;
+  const parsed = Number(price);
+  return isNaN(parsed) || parsed < 0 ? 0 : parsed;
+};
+
 const calculateTotals = (items: CartItem[], deliveryFee: number): Pick<CartState, 'totalItems' | 'subtotal' | 'total'> => {
   const totalItems = items.reduce((sum, item) => sum + item.quantity, 0);
-  const subtotal = items.reduce((sum, item) => sum + (item.price * item.quantity), 0);
+  const subtotal = items.reduce((sum, item) => {
+    const itemPrice = safePrice(item.price);
+    return sum + (itemPrice * item.quantity);
+  }, 0);
   const total = subtotal + (totalItems > 0 ? deliveryFee : 0);
   
   return { totalItems, subtotal, total };
@@ -186,7 +196,13 @@ export const CartProvider: React.FC<CartProviderProps> = ({ children }) => {
   const [state, dispatch] = useReducer(cartReducer, initialState);
 
   const addItem = (item: Omit<CartItem, 'quantity'>) => {
-    dispatch({ type: 'ADD_ITEM', payload: item });
+    // Normalize price to ensure it's a valid number
+    const normalizedItem = {
+      ...item,
+      price: safePrice(item.price)
+    };
+    console.log('Adding item to cart with normalized price:', normalizedItem);
+    dispatch({ type: 'ADD_ITEM', payload: normalizedItem });
   };
 
   const removeItem = (menuId: number) => {

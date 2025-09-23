@@ -37,6 +37,10 @@ interface NotificationContextType {
   sendTestNotification: () => Promise<void>;
   getPushToken: () => string | null;
   isNotificationServiceReady: boolean;
+  
+  // Debug functions
+  testOrderStatusNotification: (status: OrderStatus) => Promise<void>;
+  getNotificationStats: () => any;
 }
 
 const NotificationContext = createContext<NotificationContextType | undefined>(undefined);
@@ -70,13 +74,28 @@ export const NotificationProvider: React.FC<NotificationProviderProps> = ({ chil
 
   const initializePushNotifications = async () => {
     try {
+      console.log('🔔 Initializing push notifications...');
       await NotificationService.initialize();
       const currentSettings = NotificationService.getNotificationSettings();
       setPushNotificationSettings(currentSettings);
       setIsNotificationServiceReady(true);
-      console.log('Push notification service initialized');
+      
+      // Validate configuration
+      const validation = await NotificationService.validateConfiguration();
+      console.log('🔔 Push notification validation:', validation);
+      
+      if (!validation.isValid) {
+        console.warn('🔔 Push notification issues found:', validation.issues);
+      }
+      
+      console.log('🔔 Push notification service initialized successfully', {
+        settings: currentSettings,
+        token: NotificationService.getPushToken()?.slice(0, 20) + '...',
+        isValid: validation.isValid
+      });
     } catch (error) {
-      console.error('Failed to initialize push notification service:', error);
+      console.error('🔔 Failed to initialize push notification service:', error);
+      setIsNotificationServiceReady(false);
     }
   };
 
@@ -302,8 +321,17 @@ export const NotificationProvider: React.FC<NotificationProviderProps> = ({ chil
   };
 
   const handleOrderStatusChange = async (order: Order, previousStatus?: OrderStatus) => {
+    console.log('🔔 handleOrderStatusChange called:', {
+      orderId: order.id,
+      previousStatus,
+      newStatus: order.status,
+      isServiceReady: isNotificationServiceReady,
+      orderUpdatesEnabled: pushNotificationSettings.orderUpdates
+    });
+
     // Don't notify for initial status or same status
     if (!previousStatus || previousStatus === order.status) {
+      console.log('🔔 Skipping notification - no status change');
       return;
     }
 
@@ -318,6 +346,7 @@ export const NotificationProvider: React.FC<NotificationProviderProps> = ({ chil
     ];
 
     if (notifiableStatuses.includes(order.status)) {
+      console.log('🔔 Processing notification for status:', order.status);
       const { title, message } = getStatusMessage(order.status);
       
       // Add in-app notification
@@ -327,10 +356,12 @@ export const NotificationProvider: React.FC<NotificationProviderProps> = ({ chil
         type: 'order_update',
         orderId: order.id
       });
+      console.log('🔔 In-app notification added');
 
       // Send push notification if service is ready
       if (isNotificationServiceReady && pushNotificationSettings.orderUpdates) {
         try {
+          console.log('🔔 Sending push notification...');
           await sendOrderNotification({
             orderId: order.id.toString(),
             restaurantName: order.restaurant?.name || 'Restaurant',
@@ -339,14 +370,47 @@ export const NotificationProvider: React.FC<NotificationProviderProps> = ({ chil
               new Date(order.estimatedDelivery).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : 
               undefined,
           });
+          console.log('🔔 Push notification sent successfully');
         } catch (error) {
-          console.error('Failed to send push notification for order status change:', error);
+          console.error('🔔 Failed to send push notification for order status change:', error);
         }
+      } else {
+        console.log('🔔 Push notification skipped:', {
+          serviceReady: isNotificationServiceReady,
+          settingEnabled: pushNotificationSettings.orderUpdates
+        });
       }
+    } else {
+      console.log('🔔 Status not in notifiable list:', order.status);
     }
   };
 
   const unreadCount = notifications.filter(n => !n.read).length;
+
+  // Debug functions
+  const testOrderStatusNotification = async (status: OrderStatus) => {
+    console.log('🔔 Testing order status notification:', status);
+    const mockOrder: Order = {
+      id: 999,
+      status,
+      restaurant: { id: 1, name: 'Test Restaurant' },
+      estimatedDelivery: new Date(Date.now() + 30 * 60000).toISOString(), // 30 minutes from now
+    } as any;
+    
+    await handleOrderStatusChange(mockOrder, OrderStatus.PENDING);
+  };
+  
+  const getNotificationStats = () => {
+    return {
+      notificationService: NotificationService.getNotificationStats(),
+      inAppNotifications: {
+        total: notifications.length,
+        unread: unreadCount
+      },
+      settings: pushNotificationSettings,
+      isServiceReady: isNotificationServiceReady
+    };
+  };
 
   const value: NotificationContextType = {
     // In-app notifications
@@ -368,6 +432,10 @@ export const NotificationProvider: React.FC<NotificationProviderProps> = ({ chil
     sendTestNotification,
     getPushToken,
     isNotificationServiceReady,
+    
+    // Debug functions
+    testOrderStatusNotification,
+    getNotificationStats,
   };
 
   return (

@@ -18,9 +18,10 @@ import { BackIcon, HeartIcon, PlusIcon, ClockIcon } from '../../../shared/compon
 import { Colors } from '../../../shared/theme/colors';
 import { Spacing } from '../../../shared/theme/spacing';
 import { Typography } from '../../../shared/theme/typography';
-import { Restaurant, MenuItem } from '../../../shared/services/api';
+import { Restaurant, MenuItem, restaurantAPI } from '../../../shared/services/api';
 import { useCart } from '../../cart/context/CartContext';
 import { useToast } from '../../../shared/context/ToastContext';
+import { formatPrice, parsePrice, isValidPrice } from '../../../shared/utils/priceUtils';
 
 const { width } = Dimensions.get('window');
 
@@ -35,121 +36,172 @@ export const RestaurantDetailScreen: React.FC<RestaurantDetailScreenProps> = ({
 }) => {
   const [restaurant, setRestaurant] = useState<Restaurant | null>(null);
   const [loading, setLoading] = useState(true);
+  const [retryCount, setRetryCount] = useState(0);
+  const [hasError, setHasError] = useState(false);
   const { addItem, state } = useCart();
   const { showSuccess, showWarning, showError } = useToast();
 
   const handleAddToCart = (item: MenuItem) => {
+    // Validate restaurant data
     if (!restaurant) {
       showError('Error', 'Restaurant information not available.');
       return;
     }
     
-    // Check if adding from different restaurant
-    if (state.restaurantId && state.restaurantId !== restaurant.id) {
-      showWarning(
-        'Different Restaurant', 
-        `Your cart contains items from ${state.restaurantName}. This will clear your current cart and add the new item.`
-      );
-      
-      // Clear cart and add new item after a short delay
-      setTimeout(() => {
+    // Validate menu item
+    console.log('Adding item to cart:', {
+      id: item?.id,
+      itemName: item?.itemName,
+      price: item?.price,
+      priceType: typeof item?.price,
+      isAvailable: item?.isAvailable
+    });
+    
+    if (!item || !item.id || !item.itemName) {
+      showError('Invalid Item', 'This menu item is not available.');
+      return;
+    }
+    
+    // Validate price using utility function
+    if (!isValidPrice(item.price)) {
+      showError('Price Error', 'This item does not have a valid price.');
+      console.error('Invalid price for item:', item);
+      return;
+    }
+    
+    // Check if item is available
+    if (!item.isAvailable) {
+      showWarning('Item Unavailable', `${item.itemName} is currently sold out.`);
+      return;
+    }
+    
+    try {
+      // Check if adding from different restaurant
+      if (state.restaurantId && state.restaurantId !== restaurant.id) {
+        showWarning(
+          'Different Restaurant', 
+          `Your cart contains items from ${state.restaurantName}. This will clear your current cart and add the new item.`
+        );
+        
+        // Clear cart and add new item after a short delay
+        setTimeout(() => {
+          try {
+            addItem({
+              id: item.id,
+              menuId: item.id,
+              itemName: item.itemName,
+              description: item.description || '',
+              price: parsePrice(item.price),
+              imageUrl: item.imageUrl || '',
+              restaurantId: restaurant.id,
+              restaurantName: restaurant.name,
+            });
+            showSuccess('Added to Cart! 🛒', `${item.itemName} has been added to your cart.`);
+          } catch (cartError) {
+            console.error('Error adding item to cart:', cartError);
+            showError('Cart Error', 'Failed to add item to cart. Please try again.');
+          }
+        }, 1500);
+      } else {
         addItem({
           id: item.id,
           menuId: item.id,
           itemName: item.itemName,
-          description: item.description,
-          price: item.price,
-          imageUrl: item.imageUrl,
+          description: item.description || '',
+          price: parsePrice(item.price),
+          imageUrl: item.imageUrl || '',
           restaurantId: restaurant.id,
           restaurantName: restaurant.name,
         });
         showSuccess('Added to Cart! 🛒', `${item.itemName} has been added to your cart.`);
-      }, 1500);
-    } else {
-      addItem({
-        id: item.id,
-        menuId: item.id,
-        itemName: item.itemName,
-        description: item.description,
-        price: item.price,
-        imageUrl: item.imageUrl,
-        restaurantId: restaurant.id,
-        restaurantName: restaurant.name,
-      });
-      showSuccess('Added to Cart! 🛒', `${item.itemName} has been added to your cart.`);
+      }
+    } catch (error) {
+      console.error('Error in handleAddToCart:', error);
+      showError('Cart Error', 'Failed to add item to cart. Please try again.');
     }
   };
 
   useEffect(() => {
-    loadRestaurantDetails();
+    if (restaurantId) {
+      loadRestaurantDetails(true);
+    }
   }, [restaurantId]);
 
-  const loadRestaurantDetails = async () => {
+  const loadRestaurantDetails = async (showLoadingState = true) => {
     try {
-      setLoading(true);
-      // Mock data for now - replace with actual API call
-      const mockRestaurant: Restaurant = {
-        id: restaurantId,
-        name: 'Sample Restaurant',
-        address: '123 Main St',
-        lat: 34.0522,
-        lng: -118.2437,
-        status: 'OPEN',
-        logoUrl: 'https://images.unsplash.com/photo-1571091718767-18b5b1457add?w=100&h=100&fit=crop',
-        bannerUrl: 'https://images.unsplash.com/photo-1550547660-d9450f859349?w=400&h=200&fit=crop',
-        rating: 4.5,
-        totalOrders: 127,
-        description: 'Premium food made with fresh ingredients',
-        menus: [
-          {
-            id: 1,
-            restaurantId: restaurantId,
-            itemName: 'Classic Burger',
-            description: 'Juicy beef patty with lettuce and tomato',
-            price: 12.99,
-            imageUrl: 'https://images.unsplash.com/photo-1568901346375-23c9450c58cd?w=300&h=200&fit=crop',
-            isAvailable: true
-          },
-          {
-            id: 2,
-            restaurantId: restaurantId,
-            itemName: 'Chicken Burger',
-            description: 'Grilled chicken breast with avocado',
-            price: 11.99,
-            imageUrl: 'https://images.unsplash.com/photo-1606755962773-d324e2dea5f0?w=300&h=200&fit=crop',
-            isAvailable: true
-          }
-        ]
-      };
-      setRestaurant(mockRestaurant);
-    } catch (error) {
+      if (showLoadingState) {
+        setLoading(true);
+        setHasError(false);
+      }
+      
+      console.log(`Loading restaurant details for ID: ${restaurantId} (attempt ${retryCount + 1})`);
+      
+      // Validate restaurantId
+      if (!restaurantId || restaurantId <= 0) {
+        throw new Error('Invalid restaurant ID');
+      }
+      
+      // Fetch real restaurant data from API
+      const response = await restaurantAPI.getRestaurantById(restaurantId);
+      
+      if (response.success && response.data) {
+        console.log('Restaurant data loaded:', JSON.stringify(response.data, null, 2));
+        
+        // Debug: Log menu items specifically
+        if (response.data.menus && response.data.menus.length > 0) {
+          console.log('Menu items:', JSON.stringify(response.data.menus, null, 2));
+          response.data.menus.forEach((menu, index) => {
+            console.log(`Menu item ${index}:`, {
+              id: menu.id,
+              itemName: menu.itemName,
+              price: menu.price,
+              priceType: typeof menu.price,
+              isAvailable: menu.isAvailable
+            });
+          });
+        }
+        
+        setRestaurant(response.data);
+        setHasError(false);
+        setRetryCount(0); // Reset retry count on success
+      } else {
+        console.error('API returned unsuccessful response:', response);
+        throw new Error('Unable to load restaurant details');
+      }
+    } catch (error: any) {
       console.error('Error loading restaurant details:', error);
+      setHasError(true);
+      
+      // Don't show error immediately if this is a retry attempt
+      if (retryCount === 0) {
+        const errorMessage = error.response?.data?.message || error.message || 'Failed to load restaurant details';
+        
+        if (error.response?.status === 404) {
+          showError('Restaurant Not Found', 'This restaurant is not available.');
+        } else if (error.response?.status >= 500) {
+          showError('Server Error', 'Server is temporarily unavailable. Please try again.');
+        } else if (error.code === 'NETWORK_ERROR' || !navigator.onLine) {
+          showError('Network Error', 'Please check your internet connection and try again.');
+        } else {
+          showError('Loading Error', errorMessage);
+        }
+      }
     } finally {
-      setLoading(false);
+      if (showLoadingState) {
+        setLoading(false);
+      }
     }
   };
 
-  const renderMenuItem = ({ item }: { item: MenuItem }) => (
-    <View style={styles.menuItem}>
-      <Image
-        source={{ uri: item.imageUrl || 'https://via.placeholder.com/80x80' }}
-        style={styles.menuItemImage as any}
-      />
-      <View style={styles.menuItemInfo}>
-        <Text style={styles.menuItemName}>{item.itemName}</Text>
-        <Text style={styles.menuItemDescription} numberOfLines={2}>
-          {item.description || 'Delicious food item'}
-        </Text>
-        <Text style={styles.menuItemPrice}>${typeof item.price === 'number' ? item.price.toFixed(2) : '0.00'}</Text>
-      </View>
-      <TouchableOpacity
-        style={styles.addButton}
-        onPress={() => handleAddToCart(item)}
-      >
-        <PlusIcon size={20} color={Colors.background.primary} />
-      </TouchableOpacity>
-    </View>
-  );
+  const retryLoadRestaurant = async () => {
+    if (retryCount < 3) {
+      setRetryCount(prev => prev + 1);
+      await loadRestaurantDetails(true);
+    } else {
+      showError('Maximum Retries Exceeded', 'Unable to load restaurant after multiple attempts.');
+    }
+  };
+
 
   if (loading) {
     return (
@@ -165,6 +217,37 @@ export const RestaurantDetailScreen: React.FC<RestaurantDetailScreenProps> = ({
     );
   }
 
+  if (hasError) {
+    return (
+      <View style={styles.container}>
+        <StatusBar barStyle="dark-content" backgroundColor={Colors.background.primary} />
+        <SafeAreaView style={styles.container}>
+          <View style={styles.errorContainer}>
+            <View style={styles.errorContent}>
+              <Text style={styles.errorEmoji}>🍽️</Text>
+              <Text style={styles.errorTitle}>Couldn't load restaurant</Text>
+              <Text style={styles.errorMessage}>We encountered an error while loading this restaurant's information.</Text>
+              <View style={styles.errorButtonsContainer}>
+                <TouchableOpacity
+                  style={styles.retryButton}
+                  onPress={retryLoadRestaurant}
+                >
+                  <Text style={styles.retryButtonText}>Retry</Text>
+                </TouchableOpacity>
+                <TouchableOpacity
+                  style={styles.modernBackButton}
+                  onPress={onBackPress}
+                >
+                  <Text style={styles.modernBackButtonText}>Go Back</Text>
+                </TouchableOpacity>
+              </View>
+            </View>
+          </View>
+        </SafeAreaView>
+      </View>
+    );
+  }
+  
   if (!restaurant) {
     return (
       <View style={styles.container}>
@@ -355,7 +438,7 @@ export const RestaurantDetailScreen: React.FC<RestaurantDetailScreenProps> = ({
                         styles.modernMenuItemPrice,
                         !item.isAvailable && styles.unavailablePrice
                       ]}>
-                        ${typeof item.price === 'number' ? item.price.toFixed(2) : '0.00'}
+                        {formatPrice(item.price)}
                       </Text>
                       <View style={[
                         styles.availabilityBadge,
@@ -435,7 +518,6 @@ const styles = StyleSheet.create({
     backgroundColor: 'rgba(0,0,0,0.4)',
     justifyContent: 'center',
     alignItems: 'center',
-    backdropFilter: 'blur(10px)',
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.3,
@@ -786,6 +868,26 @@ const styles = StyleSheet.create({
   },
   modernBackButtonText: {
     color: Colors.text.white,
+    fontSize: 16,
+    fontWeight: '600',
+    textAlign: 'center',
+  },
+  errorButtonsContainer: {
+    flexDirection: 'row',
+    gap: 12,
+    marginTop: 20,
+  },
+  retryButton: {
+    backgroundColor: Colors.background.secondary,
+    paddingHorizontal: 24,
+    paddingVertical: 12,
+    borderRadius: 25,
+    borderWidth: 1,
+    borderColor: Colors.primary.main,
+    flex: 1,
+  },
+  retryButtonText: {
+    color: Colors.primary.main,
     fontSize: 16,
     fontWeight: '600',
     textAlign: 'center',

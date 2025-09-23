@@ -10,7 +10,7 @@ const getApiBaseUrl = () => {
   } else {
     // For mobile devices, use your computer's IP address
     // You may need to update this IP if your network changes
-    return 'http://192.168.1.5:3001/api';
+    return 'http://192.168.1.11:3001/api';
   }
 };
 
@@ -138,9 +138,10 @@ export interface MenuItem {
   restaurantId: number;
   itemName: string;
   description?: string;
-  price: number;
+  price: string | number; // API returns string, but can handle both types
   imageUrl?: string;
   isAvailable: boolean;
+  category?: string; // Added from debug output
 }
 
 // API Functions
@@ -323,6 +324,81 @@ export const walletAPI = {
       return response.data;
     } catch (error) {
       console.error('checkBalance error:', error);
+      throw error;
+    }
+  }
+};
+
+// Rating API Functions
+export const ratingAPI = {
+  async rateRestaurant(restaurantId: number, rating: number, comment?: string): Promise<{ success: boolean; message: string }> {
+    try {
+      console.log('Calling rateRestaurant API...');
+      const response = await api.post('/ratings/restaurant', {
+        restaurantId,
+        rating,
+        comment
+      });
+      console.log('rateRestaurant response:', response.data);
+      return response.data;
+    } catch (error) {
+      console.error('rateRestaurant error:', error);
+      throw error;
+    }
+  },
+
+  async rateOrder(orderId: number, rating: number, comment?: string): Promise<{ success: boolean; message: string }> {
+    try {
+      console.log('Calling rateOrder API...');
+      const response = await api.post('/ratings/order', {
+        orderId,
+        rating,
+        comment
+      });
+      console.log('rateOrder response:', response.data);
+      return response.data;
+    } catch (error) {
+      console.error('rateOrder error:', error);
+      throw error;
+    }
+  },
+
+  async getUserRatings(): Promise<{ success: boolean; data: any[] }> {
+    try {
+      console.log('Calling getUserRatings API...');
+      const response = await api.get('/ratings/user');
+      console.log('getUserRatings response:', response.data);
+      return response.data;
+    } catch (error) {
+      console.error('getUserRatings error:', error);
+      throw error;
+    }
+  },
+
+  async rateDriver(driverId: number, rating: number, comment?: string): Promise<{ success: boolean; message: string }> {
+    try {
+      console.log('Calling rateDriver API...');
+      const response = await api.post('/ratings/driver', {
+        driverId,
+        rating,
+        comment
+      });
+      console.log('rateDriver response:', response.data);
+      return response.data;
+    } catch (error) {
+      console.error('rateDriver error:', error);
+      throw error;
+    }
+  },
+
+  async checkRating(type: 'restaurant' | 'order' | 'driver', targetId: number): Promise<{ success: boolean; data: { hasRated: boolean; rating: any } }> {
+    try {
+      console.log(`Calling checkRating API for ${type}:${targetId}...`);
+      const response = await api.get(`/ratings/check/${type}/${targetId}`);
+      console.log('checkRating response:', response.data);
+      return response.data;
+    } catch (error) {
+      console.error('checkRating error:', error);
       throw error;
     }
   }

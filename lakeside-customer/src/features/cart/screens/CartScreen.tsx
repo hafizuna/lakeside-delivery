@@ -137,8 +137,16 @@ const CartScreen: React.FC<CartScreenProps> = ({ onBackPress, onCheckout }) => {
           </Text>
         )}
         <View style={styles.itemPriceRow}>
-          <Text style={styles.modernItemPrice}>${item.price.toFixed(2)}</Text>
-          <Text style={styles.itemSubtotal}>× {item.quantity} = ${(item.price * item.quantity).toFixed(2)}</Text>
+          <Text style={styles.modernItemPrice}>
+            ${item.price != null && !isNaN(item.price) ? Number(item.price).toFixed(2) : '0.00'}
+          </Text>
+          <Text style={styles.itemSubtotal}>
+            × {item.quantity} = ${
+              item.price != null && !isNaN(item.price) 
+                ? (Number(item.price) * item.quantity).toFixed(2) 
+                : '0.00'
+            }
+          </Text>
         </View>
       </View>
       <View style={styles.modernQuantityControls}>

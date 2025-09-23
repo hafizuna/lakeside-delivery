@@ -21,6 +21,9 @@ import {
   BackIcon,
   PhoneIcon
 } from '../../../shared/components/CustomIcons';
+import { ratingAPI } from '../../../shared/services/api';
+import { Modal } from 'react-native';
+import Rating, { RatingData } from '../../../shared/components/Rating';
 import { SharedHeader } from '../../../shared/components/SharedHeader';
 import { Colors } from '../../../shared/theme/colors';
 import { Order, OrderStatus } from '../../../shared/types/Order';
@@ -37,6 +40,13 @@ const OrdersScreen: React.FC<OrdersScreenProps> = ({ navigation }) => {
   const [refreshing, setRefreshing] = useState(false);
   const [activeTab, setActiveTab] = useState<'active' | 'completed'>('active');
   const { state } = useCart();
+  
+  // Rating state
+  const [showRatingModal, setShowRatingModal] = useState(false);
+  const [selectedOrder, setSelectedOrder] = useState<Order | null>(null);
+  const [ratingType, setRatingType] = useState<'restaurant' | 'order' | 'driver'>('order');
+  const [isSubmittingRating, setIsSubmittingRating] = useState(false);
+  const [ratingStates, setRatingStates] = useState<{[key: string]: {hasRatedOrder: boolean, hasRatedRestaurant: boolean, hasRatedDriver: boolean}}>({});
 
   useEffect(() => {
     loadOrders();
@@ -48,6 +58,8 @@ const OrdersScreen: React.FC<OrdersScreenProps> = ({ navigation }) => {
       const response = await orderAPI.getUserOrders();
       if (response.success) {
         setOrders(response.data);
+        // Load rating states for delivered orders
+        await loadRatingStates(response.data);
       }
     } catch (error) {
       console.error('Error loading orders:', error);
@@ -55,6 +67,46 @@ const OrdersScreen: React.FC<OrdersScreenProps> = ({ navigation }) => {
     } finally {
       setLoading(false);
     }
+  };
+
+  const loadRatingStates = async (orders: Order[]) => {
+    const deliveredOrders = orders.filter(order => order.status === 'DELIVERED');
+    const newRatingStates: {[key: string]: {hasRatedOrder: boolean, hasRatedRestaurant: boolean, hasRatedDriver: boolean}} = {};
+    
+    for (const order of deliveredOrders) {
+      try {
+        // Check order rating
+        const orderRatingResponse = await ratingAPI.checkRating('order', order.id);
+        const hasRatedOrder = orderRatingResponse.success && orderRatingResponse.data.hasRated;
+        
+        // Check restaurant rating
+        const restaurantRatingResponse = await ratingAPI.checkRating('restaurant', order.restaurant.id);
+        const hasRatedRestaurant = restaurantRatingResponse.success && restaurantRatingResponse.data.hasRated;
+        
+        // Check driver rating (only if order has a driver)
+        let hasRatedDriver = false;
+        if (order.driverId) {
+          const driverRatingResponse = await ratingAPI.checkRating('driver', order.driverId);
+          hasRatedDriver = driverRatingResponse.success && driverRatingResponse.data.hasRated;
+        }
+        
+        newRatingStates[order.id] = {
+          hasRatedOrder,
+          hasRatedRestaurant,
+          hasRatedDriver
+        };
+      } catch (error) {
+        console.error(`Error checking rating states for order ${order.id}:`, error);
+        // Default to not rated if error
+        newRatingStates[order.id] = {
+          hasRatedOrder: false,
+          hasRatedRestaurant: false,
+          hasRatedDriver: false
+        };
+      }
+    }
+    
+    setRatingStates(newRatingStates);
   };
 
   const onRefresh = async () => {
@@ -188,16 +240,60 @@ const OrdersScreen: React.FC<OrdersScreenProps> = ({ navigation }) => {
     ].includes(status);
   };
 
+  const handleRateOrder = (order: Order, type: 'restaurant' | 'order' | 'driver') => {
+    setSelectedOrder(order);
+    setRatingType(type);
+    setShowRatingModal(true);
+  };
+
+  const handleRatingSubmit = async (ratingData: RatingData) => {
+    if (!selectedOrder) return;
+
+    setIsSubmittingRating(true);
+    try {
+      if (ratingType === 'restaurant') {
+        await ratingAPI.rateRestaurant(selectedOrder.restaurant.id, ratingData.rating, ratingData.comment);
+        Alert.alert('Rating Submitted', 'Thank you for rating the restaurant!');
+      } else if (ratingType === 'order') {
+        await ratingAPI.rateOrder(selectedOrder.id, ratingData.rating, ratingData.comment);
+        Alert.alert('Rating Submitted', 'Thank you for rating your order!');
+      } else if (ratingType === 'driver' && selectedOrder.driverId) {
+        await ratingAPI.rateDriver(selectedOrder.driverId, ratingData.rating, ratingData.comment);
+        Alert.alert('Rating Submitted', 'Thank you for rating the driver!');
+      }
+      setShowRatingModal(false);
+      setSelectedOrder(null);
+      // Reload rating states to update buttons
+      await loadRatingStates(orders);
+    } catch (error) {
+      console.error('Error submitting rating:', error);
+      Alert.alert('Rating Failed', 'Unable to submit rating. Please try again.');
+    } finally {
+      setIsSubmittingRating(false);
+    }
+  };
+
+
   const filteredOrders = orders.filter(order => 
     activeTab === 'active' ? isActiveOrder(order.status) : !isActiveOrder(order.status)
   );
 
   const renderOrderItem = ({ item }: { item: Order }) => {
     const canCancel = item.status === OrderStatus.PENDING || item.status === OrderStatus.ACCEPTED || item.status === OrderStatus.PREPARING;
+    const isActiveOrder = [
+      OrderStatus.PENDING,
+      OrderStatus.ACCEPTED,
+      OrderStatus.PREPARING,
+      OrderStatus.READY,
+      OrderStatus.PICKED_UP,
+      OrderStatus.DELIVERING
+    ].includes(item.status);
+    
+    const isHistoryOrder = activeTab === 'completed';
     
     return (
       <TouchableOpacity 
-        style={styles.orderCard}
+        style={[styles.orderCard, isHistoryOrder && styles.historyOrderCard]}
         onPress={() => navigation.navigate('OrderDetail', { orderId: item.id })}
       >
         <View style={styles.orderHeader}>
@@ -219,23 +315,31 @@ const OrdersScreen: React.FC<OrdersScreenProps> = ({ navigation }) => {
           </View>
         </View>
 
-        <View style={styles.orderStatus}>
+        {/* Status Badge - Different for history */}
+        <View style={[styles.orderStatus, isHistoryOrder && styles.historyOrderStatus]}>
           <View style={[styles.statusBadge, { backgroundColor: getStatusColor(item.status) }]}>
             {getStatusIcon(item.status)}
             <Text style={styles.statusText}>{getStatusText(item.status)}</Text>
           </View>
+          
+          {/* Show delivery date for completed orders */}
+          {isHistoryOrder && (
+            <Text style={styles.completedDate}>
+              Completed: {formatDate(item.updatedAt || item.createdAt)}
+            </Text>
+          )}
         </View>
 
         <View style={styles.orderItems}>
           <Text style={styles.itemsLabel}>Items:</Text>
-          {item.orderItems.slice(0, 2).map((orderItem, index) => (
+          {item.orderItems.slice(0, isHistoryOrder ? 3 : 2).map((orderItem, index) => (
             <Text key={index} style={styles.itemText}>
               {orderItem.quantity}x {orderItem.menu.itemName}
             </Text>
           ))}
-          {item.orderItems.length > 2 && (
+          {item.orderItems.length > (isHistoryOrder ? 3 : 2) && (
             <Text style={styles.moreItems}>
-              +{item.orderItems.length - 2} more items
+              +{item.orderItems.length - (isHistoryOrder ? 3 : 2)} more items
             </Text>
           )}
         </View>
@@ -247,7 +351,8 @@ const OrdersScreen: React.FC<OrdersScreenProps> = ({ navigation }) => {
           </View>
           
           <View style={styles.orderActions}>
-            {canCancel && (
+            {/* Active Order Actions */}
+            {isActiveOrder && canCancel && (
               <TouchableOpacity
                 style={styles.cancelButton}
                 onPress={() => handleCancelOrder(item.id)}
@@ -256,10 +361,86 @@ const OrdersScreen: React.FC<OrdersScreenProps> = ({ navigation }) => {
               </TouchableOpacity>
             )}
             
-            <TouchableOpacity style={styles.viewButton}>
-              <Text style={styles.viewButtonText}>View Details</Text>
-              <BackIcon size={14} color={Colors.primary.main} />
-            </TouchableOpacity>
+            {/* History Order Actions - Rating Buttons Only */}
+            {isHistoryOrder && item.status === OrderStatus.DELIVERED && (
+              <View style={styles.ratingActionsContainer}>
+                <View style={styles.ratingActionsRow}>
+                  <TouchableOpacity 
+                    style={[
+                      styles.rateOrderButton,
+                      ratingStates[item.id]?.hasRatedOrder && styles.ratedButton
+                    ]}
+                    onPress={() => handleRateOrder(item, 'order')}
+                    disabled={ratingStates[item.id]?.hasRatedOrder}
+                  >
+                    <StarIcon 
+                      size={16} 
+                      color={ratingStates[item.id]?.hasRatedOrder ? Colors.action.success : Colors.primary.main} 
+                    />
+                    <Text style={[
+                      styles.rateOrderText,
+                      ratingStates[item.id]?.hasRatedOrder && styles.ratedText
+                    ]}>
+                      {ratingStates[item.id]?.hasRatedOrder ? 'Rated' : 'Rate Order'}
+                    </Text>
+                  </TouchableOpacity>
+                  
+                  <TouchableOpacity 
+                    style={[
+                      styles.rateRestaurantButton,
+                      ratingStates[item.id]?.hasRatedRestaurant && styles.ratedButton
+                    ]}
+                    onPress={() => handleRateOrder(item, 'restaurant')}
+                    disabled={ratingStates[item.id]?.hasRatedRestaurant}
+                  >
+                    <StarIcon 
+                      size={16} 
+                      color={ratingStates[item.id]?.hasRatedRestaurant ? Colors.action.success : Colors.action.warning} 
+                    />
+                    <Text style={[
+                      styles.rateRestaurantText,
+                      ratingStates[item.id]?.hasRatedRestaurant && styles.ratedText
+                    ]}>
+                      {ratingStates[item.id]?.hasRatedRestaurant ? 'Rated' : 'Rate Restaurant'}
+                    </Text>
+                  </TouchableOpacity>
+                </View>
+                
+                {/* Driver Rating Button - Only show if order has a driver */}
+                {item.driverId && (
+                  <TouchableOpacity 
+                    style={[
+                      styles.rateDriverButton,
+                      ratingStates[item.id]?.hasRatedDriver && styles.ratedButton
+                    ]}
+                    onPress={() => handleRateOrder(item, 'driver')}
+                    disabled={ratingStates[item.id]?.hasRatedDriver}
+                  >
+                    <StarIcon 
+                      size={16} 
+                      color={ratingStates[item.id]?.hasRatedDriver ? Colors.action.success : '#6B46C1'} 
+                    />
+                    <Text style={[
+                      styles.rateDriverText,
+                      ratingStates[item.id]?.hasRatedDriver && styles.ratedText
+                    ]}>
+                      {ratingStates[item.id]?.hasRatedDriver ? 'Driver Rated' : 'Rate Driver'}
+                    </Text>
+                  </TouchableOpacity>
+                )}
+              </View>
+            )}
+            
+            {/* Active order actions */}
+            {!isHistoryOrder && (
+              <TouchableOpacity 
+                style={styles.viewButton}
+                onPress={() => navigation.navigate('OrderDetail', { orderId: item.id })}
+              >
+                <Text style={styles.viewButtonText}>View Details</Text>
+                <BackIcon size={14} color={Colors.primary.main} />
+              </TouchableOpacity>
+            )}
           </View>
         </View>
       </TouchableOpacity>
@@ -350,6 +531,42 @@ const OrdersScreen: React.FC<OrdersScreenProps> = ({ navigation }) => {
         }
         ListEmptyComponent={renderEmptyState}
       />
+      
+      {/* Rating Modal */}
+      <Modal
+        visible={showRatingModal}
+        transparent={true}
+        animationType="slide"
+        onRequestClose={() => setShowRatingModal(false)}
+      >
+        <View style={modalStyles.overlay}>
+          <View style={modalStyles.container}>
+            <View style={modalStyles.header}>
+              <Text style={modalStyles.title}>
+                Rate {ratingType === 'restaurant' ? selectedOrder?.restaurant.name : 'Your Order'}
+              </Text>
+              <TouchableOpacity
+                style={modalStyles.closeButton}
+                onPress={() => setShowRatingModal(false)}
+              >
+                <Text style={modalStyles.closeText}>✕</Text>
+              </TouchableOpacity>
+            </View>
+            <Rating
+              title={ratingType === 'restaurant' ? 'Rate Restaurant' : ratingType === 'driver' ? 'Rate Driver' : 'Rate Your Order'}
+              subtitle={ratingType === 'restaurant' 
+                ? `How was your experience with ${selectedOrder?.restaurant.name}?`
+                : ratingType === 'driver'
+                ? 'How was your delivery experience with the driver?'
+                : 'How was your overall order experience?'
+              }
+              onRatingSubmit={handleRatingSubmit}
+              isLoading={isSubmittingRating}
+              onCancel={() => setShowRatingModal(false)}
+            />
+          </View>
+        </View>
+      </Modal>
     </SafeAreaView>
   );
 };
@@ -525,6 +742,109 @@ const styles = StyleSheet.create({
     color: Colors.primary.main,
     marginRight: 4,
   },
+  rateButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    borderRadius: 20,
+    backgroundColor: Colors.background.secondary,
+    borderWidth: 1,
+    borderColor: Colors.primary.main,
+    marginRight: 8,
+  },
+  rateButtonText: {
+    fontSize: 12,
+    fontWeight: '600',
+    color: Colors.primary.main,
+    marginLeft: 4,
+  },
+  // History Order Styles
+  historyOrderCard: {
+    borderLeftWidth: 3,
+    borderLeftColor: Colors.status.delivered,
+  },
+  historyOrderStatus: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+  },
+  completedDate: {
+    fontSize: 11,
+    color: Colors.text.light,
+    fontStyle: 'italic',
+  },
+  // Rating Action Styles
+  ratingActions: {
+    flexDirection: 'column',
+    gap: 6,
+  },
+  ratingActionsContainer: {
+    flexDirection: 'column',
+    gap: 8,
+  },
+  ratingActionsRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+  rateOrderButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 14,
+    paddingVertical: 10,
+    borderRadius: 18,
+    backgroundColor: Colors.primary.light,
+    borderWidth: 1,
+    borderColor: Colors.primary.main,
+  },
+  rateRestaurantButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 14,
+    paddingVertical: 10,
+    borderRadius: 18,
+    backgroundColor: '#FFF8DC',
+    borderWidth: 1,
+    borderColor: Colors.action.warning,
+  },
+  rateOrderText: {
+    fontSize: 12,
+    fontWeight: '700',
+    color: Colors.primary.main,
+    marginLeft: 6,
+  },
+  rateRestaurantText: {
+    fontSize: 12,
+    fontWeight: '700',
+    color: Colors.action.warning,
+    marginLeft: 6,
+  },
+  ratedButton: {
+    backgroundColor: Colors.background.secondary,
+    borderColor: Colors.action.success,
+    opacity: 0.7,
+  },
+  ratedText: {
+    color: Colors.action.success,
+  },
+  rateDriverButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 16,
+    paddingVertical: 10,
+    borderRadius: 18,
+    backgroundColor: '#F3F0FF',
+    borderWidth: 1,
+    borderColor: '#6B46C1',
+    alignSelf: 'flex-start',
+  },
+  rateDriverText: {
+    fontSize: 12,
+    fontWeight: '700',
+    color: '#6B46C1',
+    marginLeft: 6,
+  },
   emptyState: {
     flex: 1,
     alignItems: 'center',
@@ -554,6 +874,46 @@ const styles = StyleSheet.create({
     fontSize: 14,
     fontWeight: '600',
     color: Colors.text.white,
+  },
+});
+
+const modalStyles = StyleSheet.create({
+  overlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0, 0, 0, 0.5)',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  container: {
+    backgroundColor: Colors.background.primary,
+    borderRadius: 20,
+    padding: 20,
+    width: '90%',
+    maxWidth: 400,
+  },
+  header: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 20,
+  },
+  title: {
+    fontSize: 18,
+    fontWeight: '600',
+    color: Colors.text.primary,
+    flex: 1,
+  },
+  closeButton: {
+    width: 30,
+    height: 30,
+    borderRadius: 15,
+    backgroundColor: Colors.background.secondary,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  closeText: {
+    fontSize: 16,
+    color: Colors.text.secondary,
   },
 });
 
