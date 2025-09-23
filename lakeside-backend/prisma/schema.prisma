@@ -27,6 +27,7 @@ model User {
   auditLogs               AuditLog[]
   customerWalletTransactions WalletTransaction[] @relation("CustomerWalletTransactions")
   adminWalletActions         WalletTransaction[] @relation("AdminWalletActions")
+  ratings                    Rating[]
   
   @@map("users")
 }
@@ -50,7 +51,6 @@ model Driver {
   // Driver Performance & Status
   onlineAt          DateTime? @map("online_at")
   totalDeliveries   Int       @default(0) @map("total_deliveries")
-  avgRating         Float?    @default(5.0) @map("avg_rating")
   completionRate    Float?    @default(100.0) @map("completion_rate")
   lastDeliveryAt    DateTime? @map("last_delivery_at")
   
@@ -61,6 +61,7 @@ model Driver {
   orderTracking     OrderTracking[]
   walletTransactions WalletTransaction[]
   supportTickets    SupportTicket[]
+  ratings           Rating[] @relation("DriverRatings")
   
   @@map("drivers")
 }
@@ -88,6 +89,7 @@ model Restaurant {
   menus          Menu[]
   orders         Order[]
   supportTickets SupportTicket[]
+  ratings        Rating[] @relation("RestaurantRatings")
   
   @@map("restaurants")
 }
@@ -119,6 +121,7 @@ model Order {
   deliveryFee  Decimal     @map("delivery_fee") @db.Decimal(10, 2)
   commission   Decimal     @map("commission") @db.Decimal(10, 2)
   status       OrderStatus @default(PENDING)
+  orderRating  Float?      @default(0.0) @map("order_rating")
   
   // Restaurant Pickup Information (CRITICAL - Driver needs this!)
   pickupAddress        String?  @map("pickup_address")
@@ -160,6 +163,7 @@ model Order {
   orderItems    OrderItem[]
   orderTracking OrderTracking[]
   supportTickets SupportTicket[]
+  ratings        Rating[] @relation("OrderRatings")
   
   @@map("orders")
 }
@@ -336,6 +340,38 @@ model SupportTicket {
   @@map("support_tickets")
 }
 
+// Rating system
+model Rating {
+  id           Int        @id @default(autoincrement()) @map("rating_id")
+  customerId   Int        @map("customer_id")
+  ratingType   RatingType @map("rating_type")
+  
+  // Target entity (restaurant, order, or driver)
+  restaurantId Int?       @map("restaurant_id")
+  orderId      Int?       @map("order_id")
+  driverId     Int?       @map("driver_id")
+  
+  // Rating details
+  rating       Int        // 1-5 stars
+  comment      String?    @db.Text
+  
+  // Timestamps
+  createdAt    DateTime   @default(now()) @map("created_at")
+  updatedAt    DateTime   @updatedAt @map("updated_at")
+  
+  // Relations
+  customer     User        @relation(fields: [customerId], references: [id], onDelete: Cascade)
+  restaurant   Restaurant? @relation("RestaurantRatings", fields: [restaurantId], references: [id], onDelete: Cascade)
+  order        Order?      @relation("OrderRatings", fields: [orderId], references: [id], onDelete: Cascade)
+  driver       Driver?     @relation("DriverRatings", fields: [driverId], references: [id], onDelete: Cascade)
+  
+  // Constraints
+  @@unique([customerId, restaurantId], name: "unique_customer_restaurant_rating")
+  @@unique([customerId, orderId], name: "unique_customer_order_rating")
+  @@unique([customerId, driverId], name: "unique_customer_driver_rating")
+  @@map("ratings")
+}
+
 // Enums
 enum UserRole {
   CUSTOMER
@@ -447,4 +483,10 @@ enum SupportTicketStatus {
   OPEN
   RESOLVED
   CLOSED
+}
+
+enum RatingType {
+  RESTAURANT
+  ORDER
+  DRIVER
 }

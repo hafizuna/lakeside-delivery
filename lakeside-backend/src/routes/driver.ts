@@ -630,7 +630,7 @@ router.get('/profile', authenticateToken, async (req, res) => {
           totalOrders: totalOrders,
           completedOrders: completedOrders,
           completionRate: completionRate,
-          avgRating: driver.avgRating || 5.0
+          avgRating: driver.rating || 5.0
         }
       }
     });
@@ -934,7 +934,7 @@ router.get('/dashboard', authenticateToken, async (req, res) => {
         name: driver.user.name,
         isAvailable: driver.isAvailable,
         onlineAt: driver.onlineAt,
-        rating: driver.avgRating || 5.0,
+        rating: driver.rating || 5.0,
         totalDeliveries: driver.totalDeliveries,
         approvalStatus: driver.approvalStatus
       },

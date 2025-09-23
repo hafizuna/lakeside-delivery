@@ -14,6 +14,7 @@ import restaurantManagementRoutes from './routes/restaurantManagement';
 import orderRoutes from './routes/order';
 import walletRoutes from './routes/wallet';
 import driverRoutes from './routes/driver';
+import ratingRoutes from './routes/rating';
 
 const app = express();
 const PORT = process.env.PORT || 3001;
@@ -34,6 +35,7 @@ app.use('/api/restaurant', restaurantManagementRoutes);
 app.use('/api/orders', orderRoutes);
 app.use('/api/wallet', walletRoutes);
 app.use('/api/driver', driverRoutes);
+app.use('/api/ratings', ratingRoutes);
 
 // Health check endpoint
 app.get('/api/health', (req, res) => {
