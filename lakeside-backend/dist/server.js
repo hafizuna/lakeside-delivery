@@ -17,7 +17,8 @@ const restaurantManagement_1 = __importDefault(require("./routes/restaurantManag
 const order_1 = __importDefault(require("./routes/order"));
 const wallet_1 = __importDefault(require("./routes/wallet"));
 const driver_1 = __importDefault(require("./routes/driver"));
-const location_1 = __importDefault(require("./routes/location"));
+const rating_1 = __importDefault(require("./routes/rating"));
+const escrowOrderRoutes_1 = __importDefault(require("./routes/escrowOrderRoutes"));
 const app = (0, express_1.default)();
 const PORT = process.env.PORT || 3001;
 // Middleware
@@ -35,7 +36,8 @@ app.use('/api/restaurant', restaurantManagement_1.default);
 app.use('/api/orders', order_1.default);
 app.use('/api/wallet', wallet_1.default);
 app.use('/api/driver', driver_1.default);
-app.use('/api/location', location_1.default);
+app.use('/api/ratings', rating_1.default);
+app.use('/api/escrow-orders', escrowOrderRoutes_1.default);
 // Health check endpoint
 app.get('/api/health', (req, res) => {
     res.status(200).json({
@@ -65,6 +67,6 @@ app.listen(Number(PORT), '0.0.0.0', () => {
     console.log(`🚀 Lakeside Backend running on port ${PORT}`);
     console.log(`📍 Health check: http://localhost:${PORT}/api/health`);
     console.log(`🔐 Auth endpoints: http://localhost:${PORT}/api/auth/*`);
-    console.log(`📱 Mobile access: http://192.168.1.3:${PORT}/api/auth/*`);
+    console.log(`📱 Mobile access: http://192.168.1.11:${PORT}/api/auth/*`);
 });
 //# sourceMappingURL=server.js.map

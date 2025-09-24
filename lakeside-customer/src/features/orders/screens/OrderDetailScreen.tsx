@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   View,
   Text,
@@ -8,6 +8,7 @@ import {
   Image,
   SafeAreaView,
   StatusBar,
+  ActivityIndicator,
 } from 'react-native';
 import { 
   BackIcon,
@@ -17,7 +18,8 @@ import {
   CheckIcon,
   TrashIcon,
   PhoneIcon,
-  StarIcon
+  StarIcon,
+  AlertIcon
 } from '../../../shared/components/CustomIcons';
 import { Colors } from '../../../shared/theme/colors';
 import { Order, OrderStatus } from '../../../shared/types/Order';
@@ -28,10 +30,46 @@ import { useToast } from '../../../shared/context/ToastContext';
 import Rating, { RatingData } from '../../../shared/components/Rating';
 import { ratingAPI } from '../../../shared/services/api';
 import { Modal } from 'react-native';
+import { tokenManager } from '../../../shared/services/api';
+
+// Escrow API endpoints
+const escrowAPI = {
+  checkCancellation: async (orderId: number) => {
+    const response = await fetch(`http://192.168.1.8:3001/api/escrow-orders/${orderId}/cancellation-info`, {
+      method: 'GET',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${await tokenManager.getToken()}`,
+      },
+    });
+    return await response.json();
+  },
+  
+  cancelOrder: async (orderId: number, reason?: string) => {
+    const response = await fetch(`http://192.168.1.8:3001/api/escrow-orders/${orderId}/cancel`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${await tokenManager.getToken()}`,
+      },
+      body: JSON.stringify({ reason: reason || 'Customer requested cancellation' }),
+    });
+    return await response.json();
+  }
+};
 
 interface OrderDetailScreenProps {
   orderId: number;
   onBackPress: () => void;
+}
+
+interface CancellationStatus {
+  canCancel: boolean;
+  reason: string;
+  message: string;
+  timeRemaining?: number;
+  restaurantTimeRemaining?: number;
+  timeoutOccurred?: boolean;
 }
 
 const OrderDetailScreen: React.FC<OrderDetailScreenProps> = ({ orderId, onBackPress }) => {
@@ -43,13 +81,74 @@ const OrderDetailScreen: React.FC<OrderDetailScreenProps> = ({ orderId, onBackPr
   });
   const { showSuccess, showError, showWarning } = useToast();
   
-  // Timer state for estimated delivery countdown
-  const [timer, setTimer] = useState(1500); // 25 minutes in seconds
+  // Escrow-specific state
+  const [cancellationStatus, setCancellationStatus] = useState<CancellationStatus | null>(null);
+  const [loadingCancellation, setLoadingCancellation] = useState(false);
+  const [isCancelling, setIsCancelling] = useState(false);
   
-  // Rating state
+  // Timer state for grace period countdown
+  const [graceTimer, setGraceTimer] = useState(0);
+  const [restaurantTimer, setRestaurantTimer] = useState(0);
+  
+  // Rating state (keep existing rating functionality)
   const [showRatingModal, setShowRatingModal] = useState(false);
-  const [ratingType, setRatingType] = useState<'restaurant' | 'order'>('order');
+  const [ratingType, setRatingType] = useState<'restaurant' | 'order' | 'driver'>('order');
   const [isSubmittingRating, setIsSubmittingRating] = useState(false);
+  const [ratingStates, setRatingStates] = useState<{hasRatedOrder: boolean, hasRatedRestaurant: boolean, hasRatedDriver: boolean}>({hasRatedOrder: false, hasRatedRestaurant: false, hasRatedDriver: false});
+
+  // Load cancellation status when order changes
+  useEffect(() => {
+    if (order && order.status !== OrderStatus.DELIVERED && order.status !== OrderStatus.CANCELLED) {
+      loadCancellationStatus();
+      // Set up interval to check cancellation status every 30 seconds
+      const interval = setInterval(loadCancellationStatus, 30000);
+      return () => clearInterval(interval);
+    }
+  }, [order?.id, order?.status]);
+
+  // Timer effect for grace period countdown
+  useEffect(() => {
+    let interval: NodeJS.Timeout | null = null;
+    
+    if (cancellationStatus?.timeRemaining && cancellationStatus.timeRemaining > 0) {
+      interval = setInterval(() => {
+        setGraceTimer(prev => {
+          const newTime = Math.max(0, prev - 1);
+          if (newTime === 0) {
+            // Grace period ended, reload cancellation status
+            loadCancellationStatus();
+          }
+          return newTime;
+        });
+      }, 1000);
+    }
+    
+    return () => {
+      if (interval) clearInterval(interval);
+    };
+  }, [cancellationStatus?.timeRemaining]);
+
+  // Timer effect for restaurant timeout countdown
+  useEffect(() => {
+    let interval: NodeJS.Timeout | null = null;
+    
+    if (cancellationStatus?.restaurantTimeRemaining && cancellationStatus.restaurantTimeRemaining > 0) {
+      interval = setInterval(() => {
+        setRestaurantTimer(prev => {
+          const newTime = Math.max(0, prev - 1);
+          if (newTime === 0) {
+            // Restaurant timeout reached, reload cancellation status
+            loadCancellationStatus();
+          }
+          return newTime;
+        });
+      }, 1000);
+    }
+    
+    return () => {
+      if (interval) clearInterval(interval);
+    };
+  }, [cancellationStatus?.restaurantTimeRemaining]);
 
   useEffect(() => {
     if (error) {
@@ -57,63 +156,129 @@ const OrderDetailScreen: React.FC<OrderDetailScreenProps> = ({ orderId, onBackPr
     }
   }, [error]);
   
-  // Timer effect - countdown for active orders
+  // Load rating states when order is loaded
   useEffect(() => {
-    let interval: NodeJS.Timeout | null = null;
-    
-    if (order && (
-      order.status === OrderStatus.PENDING ||
-      order.status === OrderStatus.ACCEPTED ||
-      order.status === OrderStatus.PREPARING ||
-      order.status === OrderStatus.PICKED_UP ||
-      order.status === OrderStatus.DELIVERING
-    )) {
-      interval = setInterval(() => {
-        setTimer(prev => prev > 0 ? prev - 1 : 0);
-      }, 1000);
+    if (order && order.status === OrderStatus.DELIVERED) {
+      loadRatingStates();
+    }
+  }, [order]);
+  
+  const loadCancellationStatus = async () => {
+    if (!order) {
+      console.log('🔍 loadCancellationStatus: No order available');
+      return;
     }
     
-    return () => {
-      if (interval) {
-        clearInterval(interval);
-      }
-    };
-  }, [order?.status]);
-
-  const handleCancelOrder = async () => {
-    if (!order) return;
-    
-    showWarning('Cancelling Order', 'Please wait while we cancel your order...');
+    console.log('🔍 Starting loadCancellationStatus for order:', order.id, 'status:', order.status);
     
     try {
-      const response = await orderAPI.cancelOrder(order.id);
+      setLoadingCancellation(true);
+      const response = await escrowAPI.checkCancellation(order.id);
+      
+      console.log('🔍 ESCROW API RESPONSE:', JSON.stringify(response, null, 2));
+      
       if (response.success) {
-        showSuccess('Order Cancelled', 'Your order has been successfully cancelled.');
-        refetch(); // Refresh order data
+        const status = response.data.cancellation;
+        console.log('🔍 CANCELLATION STATUS:', JSON.stringify(status, null, 2));
+        setCancellationStatus(status);
+        
+        // Set initial timer values
+        if (status.timeRemaining) {
+          setGraceTimer(Math.floor(status.timeRemaining / 1000));
+        }
+        if (status.restaurantTimeRemaining) {
+          setRestaurantTimer(Math.floor(status.restaurantTimeRemaining / 1000));
+        }
       } else {
-        throw new Error('Cancellation failed');
+        console.error('❌ Failed to load cancellation status:', response.message);
+        // Set a fallback status to show the section
+        setCancellationStatus({
+          canCancel: false,
+          reason: 'API_ERROR',
+          message: `Unable to load cancellation status: ${response.message || 'Unknown error'}`,
+        });
       }
     } catch (error) {
-      showError('Cancellation Failed', 'Unable to cancel your order. Please contact support if this persists.');
+      console.error('🚨 Error loading cancellation status:', error);
+      // Set a fallback status to show the section
+      setCancellationStatus({
+        canCancel: false,
+        reason: 'NETWORK_ERROR',
+        message: 'Unable to connect to cancellation service. Please check your connection.',
+      });
+    } finally {
+      setLoadingCancellation(false);
     }
   };
 
+  const handleCancelOrder = async () => {
+    if (!order || !cancellationStatus?.canCancel) return;
+    
+    setIsCancelling(true);
+    
+    try {
+      const response = await escrowAPI.cancelOrder(order.id, 'Customer requested cancellation');
+      
+      if (response.success) {
+        showSuccess(
+          'Order Cancelled Successfully! ✅', 
+          `${response.message}. ${response.data?.refundAmount ? `₹${response.data.refundAmount} refund processed.` : ''}`
+        );
+        refetch(); // Refresh order data
+        loadCancellationStatus(); // Refresh cancellation status
+      } else {
+        throw new Error(response.message || 'Cancellation failed');
+      }
+    } catch (error: any) {
+      showError('Cancellation Failed', error.message || 'Unable to cancel your order. Please try again.');
+    } finally {
+      setIsCancelling(false);
+    }
+  };
+
+  const loadRatingStates = async () => {
+    if (!order) return;
+    
+    try {
+      const orderRatingResponse = await ratingAPI.checkRating('order', order.id);
+      const hasRatedOrder = orderRatingResponse.success && orderRatingResponse.data.hasRated;
+      
+      const restaurantRatingResponse = await ratingAPI.checkRating('restaurant', order.restaurant.id);
+      const hasRatedRestaurant = restaurantRatingResponse.success && restaurantRatingResponse.data.hasRated;
+      
+      let hasRatedDriver = false;
+      if (order.driverId) {
+        const driverRatingResponse = await ratingAPI.checkRating('driver', order.driverId);
+        hasRatedDriver = driverRatingResponse.success && driverRatingResponse.data.hasRated;
+      }
+      
+      setRatingStates({ hasRatedOrder, hasRatedRestaurant, hasRatedDriver });
+    } catch (error) {
+      console.error('Error checking rating states:', error);
+      setRatingStates({ hasRatedOrder: false, hasRatedRestaurant: false, hasRatedDriver: false });
+    }
+  };
+  
+
   const getStatusIcon = (status: OrderStatus) => {
     const iconProps = { size: 20, color: Colors.background.primary };
+    const statusStr = String(status).toUpperCase();
     
-    switch (status) {
-      case OrderStatus.PENDING:
+    switch (statusStr) {
+      case 'PENDING':
         return <ClockIcon {...iconProps} />;
-      case OrderStatus.ACCEPTED:
+      case 'ACCEPTED':
         return <CheckIcon {...iconProps} />;
-      case OrderStatus.PREPARING:
+      case 'PREPARING':
         return <OrdersIcon {...iconProps} />;
-      case OrderStatus.PICKED_UP:
-      case OrderStatus.DELIVERING:
+      case 'READY':
+        return <CheckIcon {...iconProps} />; // Ready for pickup
+      case 'PICKED_UP':
+      case 'DELIVERING':
         return <MapIcon {...iconProps} />;
-      case OrderStatus.DELIVERED:
+      case 'DELIVERED':
         return <CheckIcon {...iconProps} />;
-      case OrderStatus.CANCELLED:
+      case 'CANCELLED':
         return <TrashIcon {...iconProps} />;
       default:
         return <ClockIcon {...iconProps} />;
@@ -121,19 +286,23 @@ const OrderDetailScreen: React.FC<OrderDetailScreenProps> = ({ orderId, onBackPr
   };
 
   const getStatusColor = (status: OrderStatus) => {
-    switch (status) {
-      case OrderStatus.PENDING:
+    const statusStr = String(status).toUpperCase();
+    
+    switch (statusStr) {
+      case 'PENDING':
         return Colors.status.pending;
-      case OrderStatus.ACCEPTED:
+      case 'ACCEPTED':
         return Colors.status.confirmed;
-      case OrderStatus.PREPARING:
+      case 'PREPARING':
         return Colors.status.preparing;
-      case OrderStatus.PICKED_UP:
-      case OrderStatus.DELIVERING:
+      case 'READY':
+        return Colors.action.warning; // Orange for ready
+      case 'PICKED_UP':
+      case 'DELIVERING':
         return Colors.primary.main;
-      case OrderStatus.DELIVERED:
+      case 'DELIVERED':
         return Colors.status.delivered;
-      case OrderStatus.CANCELLED:
+      case 'CANCELLED':
         return Colors.status.cancelled;
       default:
         return Colors.status.pending;
@@ -141,41 +310,68 @@ const OrderDetailScreen: React.FC<OrderDetailScreenProps> = ({ orderId, onBackPr
   };
 
   const getStatusText = (status: OrderStatus) => {
-    switch (status) {
-      case OrderStatus.PENDING:
+    console.log('📋 Order Status Debug:', {
+      status: status,
+      statusType: typeof status,
+      statusValue: JSON.stringify(status),
+      allOrderStatuses: Object.values(OrderStatus),
+      enumComparisons: {
+        isPending: status === OrderStatus.PENDING,
+        isAccepted: status === OrderStatus.ACCEPTED,
+        isPreparing: status === OrderStatus.PREPARING,
+        isReady: status === OrderStatus.READY,
+        isPickedUp: status === OrderStatus.PICKED_UP,
+        isDelivering: status === OrderStatus.DELIVERING,
+        isDelivered: status === OrderStatus.DELIVERED,
+        isCancelled: status === OrderStatus.CANCELLED
+      }
+    });
+    
+    // Convert to uppercase string for comparison to handle any case issues
+    const statusStr = String(status).toUpperCase();
+    
+    switch (statusStr) {
+      case 'PENDING':
         return 'Order Placed';
-      case OrderStatus.ACCEPTED:
+      case 'ACCEPTED':
         return 'Order Confirmed';
-      case OrderStatus.PREPARING:
+      case 'PREPARING':
         return 'Being Prepared';
-      case OrderStatus.PICKED_UP:
+      case 'READY':
+        return 'Ready for Pickup';
+      case 'PICKED_UP':
         return 'Picked Up';
-      case OrderStatus.DELIVERING:
+      case 'DELIVERING':
         return 'On the Way';
-      case OrderStatus.DELIVERED:
+      case 'DELIVERED':
         return 'Delivered';
-      case OrderStatus.CANCELLED:
+      case 'CANCELLED':
         return 'Cancelled';
       default:
-        return 'Unknown';
+        console.warn('⚠️ Unknown order status:', status, 'converted to:', statusStr);
+        return `Status: ${status}`;  // Show actual status instead of "Unknown"
     }
   };
 
   const getStatusDescription = (status: OrderStatus) => {
-    switch (status) {
-      case OrderStatus.PENDING:
+    const statusStr = String(status).toUpperCase();
+    
+    switch (statusStr) {
+      case 'PENDING':
         return 'Your order has been placed and is waiting for restaurant confirmation.';
-      case OrderStatus.ACCEPTED:
+      case 'ACCEPTED':
         return 'The restaurant has confirmed your order and will start preparing it soon.';
-      case OrderStatus.PREPARING:
+      case 'PREPARING':
         return 'Your delicious food is being prepared with care.';
-      case OrderStatus.PICKED_UP:
+      case 'READY':
+        return 'Your order is ready for pickup and waiting for the driver.';
+      case 'PICKED_UP':
         return 'Your order has been picked up and is on its way to you.';
-      case OrderStatus.DELIVERING:
+      case 'DELIVERING':
         return 'Your order is being delivered to your location.';
-      case OrderStatus.DELIVERED:
+      case 'DELIVERED':
         return 'Your order has been successfully delivered. Enjoy your meal!';
-      case OrderStatus.CANCELLED:
+      case 'CANCELLED':
         return 'This order has been cancelled.';
       default:
         return 'Order status unknown.';
@@ -194,23 +390,168 @@ const OrderDetailScreen: React.FC<OrderDetailScreenProps> = ({ orderId, onBackPr
     });
   };
 
+  // Format time for countdown displays
   const formatTime = (seconds: number): string => {
     const mins = Math.floor(seconds / 60);
     const secs = seconds % 60;
     return `${mins}:${secs.toString().padStart(2, '0')}`;
   };
 
-  const canCancel = order && (order.status === OrderStatus.PENDING || order.status === OrderStatus.ACCEPTED);
+  // Enhanced cancellation button component
+  const renderCancellationSection = () => {
+    // Show loading state if cancellation status is not loaded yet
+    if (!cancellationStatus && loadingCancellation) {
+      return (
+        <View style={styles.section}>
+          <Text style={styles.sectionTitle}>Order Cancellation</Text>
+          <View style={styles.loadingContainer}>
+            <ActivityIndicator size="small" color={Colors.primary.main} />
+            <Text style={styles.loadingText}>Loading cancellation options...</Text>
+          </View>
+        </View>
+      );
+    }
+    
+    // If not loading and no status, show a fallback message for early-stage orders
+    if (!cancellationStatus) {
+      console.log('🔍 renderCancellationSection: No cancellation status available');
+      return (
+        <View style={styles.section}>
+          <Text style={styles.sectionTitle}>Order Cancellation</Text>
+          <View style={styles.cancellationCard}>
+            <AlertIcon size={24} color={Colors.action.warning} />
+            <View style={styles.cancellationContent}>
+              <Text style={styles.cancellationMessage}>
+                Cancellation options are being loaded. Please check back in a moment.
+              </Text>
+            </View>
+          </View>
+        </View>
+      );
+    }
+
+    const { canCancel, reason, message, timeRemaining, restaurantTimeRemaining, timeoutOccurred } = cancellationStatus;
+
+    return (
+      <View style={styles.section}>
+        <Text style={styles.sectionTitle}>Order Cancellation</Text>
+        
+        {/* Cancellation Status Display */}
+        <View style={[styles.cancellationCard, canCancel ? styles.canCancelCard : styles.cannotCancelCard]}>
+          {canCancel ? (
+            <CheckIcon size={24} color={Colors.action.success} />
+          ) : (
+            <AlertIcon size={24} color={Colors.action.warning} />
+          )}
+          
+          <View style={styles.cancellationContent}>
+            <Text style={styles.cancellationMessage}>{message}</Text>
+            
+            {/* Grace period countdown */}
+            {reason === 'FREE_CANCELLATION_WINDOW' && graceTimer > 0 && (
+              <Text style={styles.graceTimer}>
+                🕐 Free cancellation ends in {formatTime(graceTimer)}
+              </Text>
+            )}
+            
+            {/* Restaurant timeout countdown */}
+            {reason === 'BEFORE_RESTAURANT_ACCEPTANCE' && restaurantTimer > 0 && (
+              <Text style={styles.restaurantTimer}>
+                ⏱️ Restaurant has {formatTime(restaurantTimer)} to accept
+              </Text>
+            )}
+            
+            {/* Timeout occurred */}
+            {timeoutOccurred && (
+              <Text style={styles.timeoutMessage}>
+                ⚠️ Restaurant timeout - Full refund available
+              </Text>
+            )}
+          </View>
+        </View>
+
+        {/* Cancel Button */}
+        {canCancel && (
+          <TouchableOpacity 
+            style={[styles.cancelButton, isCancelling && styles.cancellingButton]} 
+            onPress={handleCancelOrder}
+            disabled={isCancelling}
+          >
+            {isCancelling ? (
+              <View style={styles.cancellingContent}>
+                <ActivityIndicator size="small" color={Colors.text.white} />
+                <Text style={styles.cancellingText}>Cancelling...</Text>
+              </View>
+            ) : (
+              <Text style={styles.cancelButtonText}>
+                {reason === 'FREE_CANCELLATION_WINDOW' ? 'Cancel Order (Free)' : 
+                 reason === 'RESTAURANT_TIMEOUT' ? 'Cancel Order (Full Refund)' : 
+                 'Cancel Order (Full Refund)'}
+              </Text>
+            )}
+          </TouchableOpacity>
+        )}
+        
+        {/* Cannot Cancel Explanation */}
+        {!canCancel && (
+          <View style={styles.cannotCancelExplanation}>
+            <Text style={styles.cannotCancelText}>
+              {reason === 'RESTAURANT_ACCEPTED' ? '🏪 Restaurant has accepted and is preparing your order' :
+               reason === 'ORDER_COMPLETED' ? `✅ Order has been ${order?.status?.toLowerCase() || 'completed'}` :
+               reason === 'UNKNOWN_STATE' ? '📞 Please contact support for assistance' :
+               message || 'Order cannot be cancelled at this time'}
+            </Text>
+          </View>
+        )}
+      </View>
+    );
+  };
+
+  // Determine if cancellation section should be shown (only for API logic)
+  const shouldShowCancellationSection = () => {
+    if (!order) {
+      console.log('🔍 shouldShowCancellationSection: No order');
+      return false;
+    }
+    
+    // This function is now mainly for API calls - the UI visibility is controlled by canShowCancellation
+    const statusStr = String(order.status).toUpperCase();
+    const shouldShow = statusStr === 'PENDING' || statusStr === 'ACCEPTED';
+    
+    console.log('🔍 shouldShowCancellationSection DEBUG:', {
+      orderStatus: order.status,
+      orderStatusType: typeof order.status,
+      statusStr: statusStr,
+      shouldShow: shouldShow
+    });
+    
+    return shouldShow;
+  };
+  
   const canRate = order && order.status === OrderStatus.DELIVERED;
   const isCompleted = order && (order.status === OrderStatus.DELIVERED || order.status === OrderStatus.CANCELLED);
+  
+  // Only show cancellation for PENDING and ACCEPTED orders
+  const canShowCancellation = order && (() => {
+    const statusStr = String(order.status).toUpperCase();
+    return statusStr === 'PENDING' || statusStr === 'ACCEPTED';
+  })();
 
   const handleRateOrder = () => {
+    if (ratingStates.hasRatedOrder) return; // Already rated
     setRatingType('order');
     setShowRatingModal(true);
   };
 
   const handleRateRestaurant = () => {
+    if (ratingStates.hasRatedRestaurant) return; // Already rated
     setRatingType('restaurant');
+    setShowRatingModal(true);
+  };
+  
+  const handleRateDriver = () => {
+    if (ratingStates.hasRatedDriver || !order?.driverId) return; // Already rated or no driver
+    setRatingType('driver');
     setShowRatingModal(true);
   };
 
@@ -222,11 +563,16 @@ const OrderDetailScreen: React.FC<OrderDetailScreenProps> = ({ orderId, onBackPr
       if (ratingType === 'restaurant') {
         await ratingAPI.rateRestaurant(order.restaurant.id, ratingData.rating, ratingData.comment);
         showSuccess('Rating Submitted', 'Thank you for rating the restaurant!');
-      } else {
+      } else if (ratingType === 'order') {
         await ratingAPI.rateOrder(order.id, ratingData.rating, ratingData.comment);
         showSuccess('Rating Submitted', 'Thank you for rating your order!');
+      } else if (ratingType === 'driver' && order.driverId) {
+        await ratingAPI.rateDriver(order.driverId, ratingData.rating, ratingData.comment);
+        showSuccess('Rating Submitted', 'Thank you for rating the driver!');
       }
       setShowRatingModal(false);
+      // Reload rating states to update buttons
+      await loadRatingStates();
     } catch (error) {
       console.error('Error submitting rating:', error);
       showError('Rating Failed', 'Unable to submit rating. Please try again.');
@@ -235,11 +581,13 @@ const OrderDetailScreen: React.FC<OrderDetailScreenProps> = ({ orderId, onBackPr
     }
   };
 
+  // Loading state
   if (loading) {
     return (
       <SafeAreaView style={styles.container}>
         <StatusBar barStyle="dark-content" backgroundColor={Colors.background.primary} />
         <View style={styles.loadingContainer}>
+          <ActivityIndicator size="large" color={Colors.primary.main} />
           <Text style={styles.loadingText}>Loading order details...</Text>
         </View>
       </SafeAreaView>
@@ -274,73 +622,44 @@ const OrderDetailScreen: React.FC<OrderDetailScreenProps> = ({ orderId, onBackPr
       </View>
       
       <ScrollView style={styles.content} showsVerticalScrollIndicator={false}>
-        {isCompleted ? (
-          /* Minimalistic View for Completed Orders */
-          <View style={styles.completedOrderContainer}>
-            <View style={[styles.completedStatusBadge, { backgroundColor: getStatusColor(order.status) }]}>
-              {getStatusIcon(order.status)}
-              <Text style={styles.completedStatusText}>{getStatusText(order.status)}</Text>
-            </View>
-            
-            <Text style={styles.completedDate}>
-              {order.status === OrderStatus.DELIVERED ? 'Delivered' : 'Cancelled'} on {formatDate(order.updatedAt || order.createdAt)}
-            </Text>
+        {/* Order Status Section */}
+        <View style={styles.section}>
+          <View style={[styles.statusBadge, { backgroundColor: getStatusColor(order.status) }]}>
+            {getStatusIcon(order.status)}
+            <Text style={styles.statusText}>{getStatusText(order.status)}</Text>
           </View>
-        ) : (
-          /* Full Tracking View for Active Orders */
-          <>
-            <View style={styles.statusContainer}>
-              <Text style={styles.statusTitle}>📦 Order Status</Text>
-              <View style={styles.statusRow}>
-                {getStatusIcon(order.status)}
-                <Text style={styles.statusMainText}>{getStatusText(order.status)}</Text>
-              </View>
-              <Text style={styles.statusDescription}>{getStatusDescription(order.status)}</Text>
-              
-              {/* Address Information */}
-              <View style={styles.addressInfo}>
-                <Text style={styles.addressLabel}>📍 From: {order.restaurant?.name || 'Restaurant'}</Text>
-                <Text style={styles.addressText}>{order.restaurant?.address || 'Restaurant Address'}</Text>
-                <Text style={styles.addressLabel}>🏠 To: Delivery Address</Text>
-                <Text style={styles.addressText}>{order.deliveryAddress || 'Your Address'}</Text>
-              </View>
-              
-              {/* Driver Information */}
-              {order.driver && (
-                <View style={styles.driverInfo}>
-                  <Text style={styles.driverLabel}>🚗 Driver: {order.driver.name}</Text>
-                  <Text style={styles.driverDetails}>{order.driver.vehicleType || 'Bike'} • 4.8⭐</Text>
-                  <TouchableOpacity style={styles.callDriverButton}>
-                    <PhoneIcon size={20} color={Colors.primary.main} />
-                    <Text style={styles.callDriverText}>Call Driver</Text>
-                  </TouchableOpacity>
-                </View>
-              )}
-              
-              {/* Timer */}
-              <View style={styles.timerContainer}>
-                <ClockIcon size={20} color={Colors.primary.main} />
-                <Text style={styles.timerText}>Estimated: {formatTime(timer)}</Text>
-              </View>
-            </View>
-            
-            {/* Order Progress */}
-            <View style={styles.section}>
-              <OrderStatusProgress 
-                status={order.status}
-                estimatedDelivery={order.estimatedDelivery}
-                showMap={false}
-              />
-            </View>
-          </>
+          <Text style={styles.orderDate}>Placed on {formatDate(order.createdAt)}</Text>
+        </View>
+
+        {/* Escrow Cancellation Section - Only show for PENDING and ACCEPTED orders */}
+        {(() => {
+          const showSection = canShowCancellation;
+          console.log('🔍 CANCELLATION SECTION RENDER DEBUG:', {
+            isCompleted: isCompleted,
+            canShowCancellation: canShowCancellation,
+            showSection: showSection,
+            orderStatus: order?.status,
+            orderStatusEnum: Object.values(OrderStatus),
+            cancellationStatus: cancellationStatus,
+            loadingCancellation: loadingCancellation
+          });
+          return showSection ? renderCancellationSection() : null;
+        })()}
+
+        {/* Order Progress - Only show for active orders */}
+        {!isCompleted && (
+          <View style={styles.section}>
+            <OrderStatusProgress 
+              status={order.status}
+              estimatedDelivery={order.estimatedDeliveryTime ? new Date(Date.now() + order.estimatedDeliveryTime * 60000).toISOString() : undefined}
+              showMap={false}
+            />
+          </View>
         )}
         
-        {/* Order Details */}
+        {/* Restaurant Info */}
         <View style={styles.section}>
-          <Text style={styles.sectionTitle}>Order Details</Text>
-          <Text style={styles.orderDate}>Placed on {formatDate(order.createdAt)}</Text>
-          
-          {/* Restaurant Info */}
+          <Text style={styles.sectionTitle}>Restaurant</Text>
           <View style={styles.restaurantCard}>
             <Image
               source={{ uri: order.restaurant.logoUrl || 'https://via.placeholder.com/60x60' }}
@@ -382,7 +701,7 @@ const OrderDetailScreen: React.FC<OrderDetailScreenProps> = ({ orderId, onBackPr
           <View style={styles.summaryContainer}>
             <View style={styles.summaryRow}>
               <Text style={styles.summaryLabel}>Subtotal</Text>
-              <Text style={styles.summaryValue}>₹{(parseFloat(order.totalPrice.toString()) - parseFloat(order.deliveryFee.toString())).toFixed(2)}</Text>
+              <Text style={styles.summaryValue}>₹{parseFloat(order.itemsSubtotal?.toString() || '0').toFixed(2)}</Text>
             </View>
             <View style={styles.summaryRow}>
               <Text style={styles.summaryLabel}>Delivery Fee</Text>
@@ -395,29 +714,80 @@ const OrderDetailScreen: React.FC<OrderDetailScreenProps> = ({ orderId, onBackPr
           </View>
         </View>
         
-        {/* Action Buttons */}
-        {canCancel && (
-          <View style={styles.section}>
-            <TouchableOpacity style={styles.cancelButton} onPress={handleCancelOrder}>
-              <Text style={styles.cancelButtonText}>Cancel Order</Text>
-            </TouchableOpacity>
-          </View>
-        )}
         
         {/* Rating Buttons for Delivered Orders */}
         {canRate && (
           <View style={styles.section}>
             <Text style={styles.sectionTitle}>Rate Your Experience</Text>
-            <View style={styles.ratingButtonsContainer}>
-              <TouchableOpacity style={styles.ratingButton} onPress={handleRateOrder}>
-                <StarIcon size={20} color={Colors.primary.main} />
-                <Text style={styles.ratingButtonText}>Rate Order</Text>
-              </TouchableOpacity>
+            <View style={styles.ratingActionsContainer}>
+              <View style={styles.ratingButtonsRow}>
+                <TouchableOpacity 
+                  style={[
+                    styles.ratingButton,
+                    styles.rateOrderButton,
+                    ratingStates.hasRatedOrder && styles.ratedButton
+                  ]} 
+                  onPress={handleRateOrder}
+                  disabled={ratingStates.hasRatedOrder}
+                >
+                  <StarIcon 
+                    size={20} 
+                    color={ratingStates.hasRatedOrder ? Colors.action.success : Colors.primary.main} 
+                  />
+                  <Text style={[
+                    styles.ratingButtonText,
+                    styles.rateOrderText,
+                    ratingStates.hasRatedOrder && styles.ratedText
+                  ]}>
+                    {ratingStates.hasRatedOrder ? 'Rated' : 'Rate Order'}
+                  </Text>
+                </TouchableOpacity>
+                
+                <TouchableOpacity 
+                  style={[
+                    styles.ratingButton,
+                    styles.rateRestaurantButton,
+                    ratingStates.hasRatedRestaurant && styles.ratedButton
+                  ]} 
+                  onPress={handleRateRestaurant}
+                  disabled={ratingStates.hasRatedRestaurant}
+                >
+                  <StarIcon 
+                    size={20} 
+                    color={ratingStates.hasRatedRestaurant ? Colors.action.success : Colors.action.warning} 
+                  />
+                  <Text style={[
+                    styles.ratingButtonText,
+                    styles.rateRestaurantText,
+                    ratingStates.hasRatedRestaurant && styles.ratedText
+                  ]}>
+                    {ratingStates.hasRatedRestaurant ? 'Rated' : 'Rate Restaurant'}
+                  </Text>
+                </TouchableOpacity>
+              </View>
               
-              <TouchableOpacity style={styles.ratingButton} onPress={handleRateRestaurant}>
-                <StarIcon size={20} color={Colors.primary.main} />
-                <Text style={styles.ratingButtonText}>Rate Restaurant</Text>
-              </TouchableOpacity>
+              {/* Driver Rating Button - Only show if order has a driver */}
+              {order.driverId && (
+                <TouchableOpacity 
+                  style={[
+                    styles.rateDriverButton,
+                    ratingStates.hasRatedDriver && styles.ratedButton
+                  ]}
+                  onPress={handleRateDriver}
+                  disabled={ratingStates.hasRatedDriver}
+                >
+                  <StarIcon 
+                    size={20} 
+                    color={ratingStates.hasRatedDriver ? Colors.action.success : '#6B46C1'} 
+                  />
+                  <Text style={[
+                    styles.rateDriverText,
+                    ratingStates.hasRatedDriver && styles.ratedText
+                  ]}>
+                    {ratingStates.hasRatedDriver ? 'Driver Rated' : 'Rate Driver'}
+                  </Text>
+                </TouchableOpacity>
+              )}
             </View>
           </View>
         )}
@@ -426,22 +796,21 @@ const OrderDetailScreen: React.FC<OrderDetailScreenProps> = ({ orderId, onBackPr
       {/* Rating Modal */}
       <Modal
         visible={showRatingModal}
-        transparent
         animationType="slide"
+        transparent={true}
         onRequestClose={() => setShowRatingModal(false)}
       >
-        <View style={styles.modalOverlay}>
-          <Rating
-            title={ratingType === 'restaurant' ? 'Rate Restaurant' : 'Rate Your Order'}
-            subtitle={ratingType === 'restaurant' 
-              ? `How was your experience with ${order?.restaurant?.name || 'this restaurant'}?`
-              : 'How was your order experience?'
-            }
-            onRatingSubmit={handleRatingSubmit}
-            onCancel={() => setShowRatingModal(false)}
-            isLoading={isSubmittingRating}
-          />
-        </View>
+        <Rating
+          title={ratingType === 'restaurant' ? 'Rate Restaurant' : ratingType === 'driver' ? 'Rate Driver' : 'Rate Your Order'}
+          subtitle={
+            ratingType === 'restaurant' ? `How was your experience with ${order.restaurant.name}?` :
+            ratingType === 'driver' ? `How was your delivery experience with ${order.driver?.name || 'the driver'}?` :
+            'How was your overall order experience?'
+          }
+          onRatingSubmit={handleRatingSubmit}
+          onCancel={() => setShowRatingModal(false)}
+          isLoading={isSubmittingRating}
+        />
       </Modal>
     </SafeAreaView>
   );
@@ -593,9 +962,76 @@ const styles = StyleSheet.create({
     borderRadius: 25,
   },
   backButtonText: {
+    color: Colors.primary.main,
+    fontSize: 16,
+    fontWeight: '600',
+  },
+  
+  // Escrow-specific styles
+  cancellationCard: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    padding: 16,
+    borderRadius: 12,
+    marginBottom: 16,
+  },
+  canCancelCard: {
+    backgroundColor: Colors.action.success + '15',
+    borderWidth: 1,
+    borderColor: Colors.action.success + '30',
+  },
+  cannotCancelCard: {
+    backgroundColor: Colors.action.warning + '15',
+    borderWidth: 1,
+    borderColor: Colors.action.warning + '30',
+  },
+  cancellationContent: {
+    flex: 1,
+    marginLeft: 12,
+  },
+  cancellationMessage: {
+    fontSize: 16,
+    color: Colors.text.primary,
+    fontWeight: '500',
+    marginBottom: 4,
+  },
+  graceTimer: {
+    fontSize: 14,
+    color: Colors.action.success,
+    fontWeight: '600',
+  },
+  restaurantTimer: {
+    fontSize: 14,
+    color: Colors.action.warning,
+    fontWeight: '600',
+  },
+  timeoutMessage: {
+    fontSize: 14,
+    color: Colors.action.error,
+    fontWeight: '600',
+  },
+  cancellingButton: {
+    backgroundColor: Colors.action.error + '80',
+  },
+  cancellingContent: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+  cancellingText: {
     color: Colors.text.white,
     fontSize: 16,
     fontWeight: '600',
+  },
+  cannotCancelExplanation: {
+    padding: 12,
+    backgroundColor: Colors.background.secondary,
+    borderRadius: 8,
+  },
+  cannotCancelText: {
+    fontSize: 14,
+    color: Colors.text.secondary,
+    textAlign: 'center',
   },
   orderInfoSection: {
     backgroundColor: Colors.background.primary,
@@ -625,6 +1061,20 @@ const styles = StyleSheet.create({
     fontWeight: '600',
     color: Colors.text.primary,
     marginBottom: 16,
+  },
+  statusBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    alignSelf: 'flex-start',
+    paddingHorizontal: 16,
+    paddingVertical: 8,
+    borderRadius: 20,
+    marginBottom: 12,
+  },
+  statusText: {
+    color: Colors.text.white,
+    fontWeight: '600',
+    marginLeft: 8,
   },
   restaurantCard: {
     flexDirection: 'row',
@@ -764,17 +1214,16 @@ const styles = StyleSheet.create({
     padding: 20,
   },
   cancelButton: {
-    backgroundColor: Colors.background.primary,
-    borderWidth: 2,
-    borderColor: Colors.action.error,
+    backgroundColor: Colors.action.error,
     paddingVertical: 16,
+    paddingHorizontal: 24,
     borderRadius: 12,
     alignItems: 'center',
   },
   cancelButtonText: {
+    color: Colors.text.white,
     fontSize: 16,
     fontWeight: '600',
-    color: Colors.action.error,
   },
   
   // Bottom sheet
@@ -996,27 +1445,56 @@ const styles = StyleSheet.create({
   },
   
   // Rating styles
-  ratingButtonsContainer: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
+  ratingActionsContainer: {
     gap: 12,
   },
+  ratingButtonsRow: {
+    flexDirection: 'row',
+    gap: 8,
+  },
   ratingButton: {
-    flex: 1,
     flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'center',
-    paddingVertical: 14,
-    borderRadius: 12,
-    borderWidth: 1,
-    borderColor: Colors.primary.main,
-    backgroundColor: Colors.primary.light,
+    paddingVertical: 12,
+    paddingHorizontal: 16,
+    borderRadius: 8,
+    borderWidth: 1.5,
     gap: 8,
+  },
+  rateOrderButton: {
+    flex: 1,
+    borderColor: Colors.primary.main,
+    backgroundColor: Colors.primary.main + '10',
+  },
+  rateRestaurantButton: {
+    flex: 1,
+    borderColor: '#FF8C00',
+    backgroundColor: '#FF8C00' + '10',
+  },
+  rateDriverButton: {
+    borderColor: '#8A2BE2',
+    backgroundColor: '#8A2BE2' + '10',
   },
   ratingButtonText: {
     fontSize: 14,
     fontWeight: '600',
+  },
+  rateOrderText: {
     color: Colors.primary.main,
+  },
+  rateRestaurantText: {
+    color: '#FF8C00',
+  },
+  rateDriverText: {
+    color: '#8A2BE2',
+  },
+  ratedButton: {
+    backgroundColor: Colors.background.secondary,
+    borderColor: Colors.action.success,
+    opacity: 0.7,
+  },
+  ratedText: {
+    color: Colors.action.success,
   },
   modalOverlay: {
     flex: 1,

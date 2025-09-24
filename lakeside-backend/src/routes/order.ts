@@ -1,7 +1,8 @@
 import { Router } from 'express';
-import { PrismaClient } from '@prisma/client';
+import { PrismaClient, Prisma } from '@prisma/client';
 import { authenticateToken } from '../middleware/auth';
 import walletService from '../services/walletService';
+import restaurantWalletService from '../services/restaurantWalletService';
 
 const router = Router();
 const prisma = new PrismaClient();
@@ -124,7 +125,12 @@ router.post('/', authenticateToken, async (req, res) => {
   try {
     const userId = req.user?.id;
     
+    console.log('🚀 CREATE ORDER - Full Debug Info:');
+    console.log('👤 User ID:', userId);
+    console.log('📋 Request Body:', JSON.stringify(req.body, null, 2));
+    
     if (!userId) {
+      console.error('❌ User not authenticated');
       return res.status(401).json({ success: false, message: 'User not authenticated' });
     }
 
@@ -139,9 +145,23 @@ router.post('/', authenticateToken, async (req, res) => {
       deliveryInstructions,
       paymentMethod
     } = req.body;
+    
+    console.log('🏪 Restaurant ID:', restaurantId);
+    console.log('🛒 Items:', JSON.stringify(items, null, 2));
+    console.log('💰 Payment Method:', paymentMethod);
+    console.log('💸 Total Price:', totalPrice);
+    console.log('💸 Delivery Fee:', deliveryFee);
 
     // Validate required fields
+    console.log('🔍 Starting validation...');
+    console.log('🔍 restaurantId:', restaurantId, 'type:', typeof restaurantId);
+    console.log('🔍 items:', items, 'isArray:', Array.isArray(items), 'length:', items?.length);
+    console.log('🔍 deliveryAddress:', deliveryAddress);
+    console.log('🔍 totalPrice:', totalPrice, 'type:', typeof totalPrice);
+    console.log('🔍 paymentMethod:', paymentMethod);
+    
     if (!restaurantId || !items || !Array.isArray(items) || items.length === 0) {
+      console.error('❌ Validation failed: Restaurant ID and items are required');
       return res.status(400).json({ 
         success: false, 
         message: 'Restaurant ID and items are required' 
@@ -149,46 +169,77 @@ router.post('/', authenticateToken, async (req, res) => {
     }
 
     if (!deliveryAddress || !totalPrice || !paymentMethod) {
+      console.error('❌ Validation failed: Delivery address, total price, and payment method are required');
       return res.status(400).json({ 
         success: false, 
         message: 'Delivery address, total price, and payment method are required' 
       });
     }
+    
+    console.log('✅ Basic validation passed');
 
-    // Verify restaurant exists
+    // Verify restaurant exists and get commission rate
     const restaurant = await prisma.restaurant.findUnique({
-      where: { id: restaurantId }
+      where: { id: restaurantId },
+      select: {
+        id: true,
+        name: true,
+        address: true,
+        lat: true,
+        lng: true,
+        commissionRate: true
+      }
     });
 
     if (!restaurant) {
       return res.status(404).json({ success: false, message: 'Restaurant not found' });
     }
 
+    // Calculate pricing structure
+    const itemsSubtotal = parseFloat(totalPrice.toString()); // Current totalPrice from frontend is actually items subtotal
+    const deliveryFeeAmount = parseFloat(deliveryFee?.toString() || '0');
+    const newTotalPrice = itemsSubtotal + deliveryFeeAmount; // True total = items + delivery
+    const restaurantCommission = itemsSubtotal * (restaurant.commissionRate.toNumber() / 100);
+    const deliveryCommissionAmount = deliveryFeeAmount * 0.1; // 10% of delivery fee
+    const platformEarningsAmount = restaurantCommission + deliveryCommissionAmount;
+    
+    console.log('💰 PRICING BREAKDOWN:');
+    console.log('📦 Items Subtotal:', itemsSubtotal);
+    console.log('🚚 Delivery Fee:', deliveryFeeAmount);
+    console.log('💳 New Total Price:', newTotalPrice);
+    console.log('🏪 Restaurant Commission ({}%):', restaurant.commissionRate.toNumber(), restaurantCommission);
+    console.log('📦 Delivery Commission (10%):', deliveryCommissionAmount);
+    console.log('💼 Platform Earnings:', platformEarningsAmount);
+
     // Handle wallet payment if selected
     if (paymentMethod.toUpperCase() === 'WALLET') {
-      const totalAmount = parseFloat(totalPrice.toString()) + parseFloat(deliveryFee?.toString() || '0');
-      
-      // Check wallet balance
-      const balanceCheck = await walletService.checkSufficientBalance(userId, totalAmount);
+      // Check wallet balance against the TRUE total (items + delivery)
+      const balanceCheck = await walletService.checkSufficientBalance(userId, newTotalPrice);
       if (!balanceCheck.success || !balanceCheck.data?.hasSufficientBalance) {
         return res.status(400).json({
           success: false,
           message: 'Insufficient wallet balance. Please top up your wallet.',
-          currentBalance: balanceCheck.data?.currentBalance || 0
+          currentBalance: balanceCheck.data?.currentBalance || 0,
+          requiredAmount: newTotalPrice
         });
       }
     }
 
     // Create order with order items in a transaction
     const order = await prisma.$transaction(async (tx) => {
-      // Create the order
+      // Create the order with NEW PRICING STRUCTURE
       const newOrder = await tx.order.create({
         data: {
           customerId: userId,
           restaurantId,
-          totalPrice: parseFloat(totalPrice.toString()),
-          deliveryFee: parseFloat(deliveryFee?.toString() || '0'),
-          commission: parseFloat((totalPrice * 0.15).toString()), // 15% commission
+          // NEW PRICING FIELDS
+          itemsSubtotal: itemsSubtotal,
+          deliveryFee: deliveryFeeAmount,
+          totalPrice: newTotalPrice,                    // itemsSubtotal + deliveryFee
+          // COMMISSION FIELDS
+          restaurantCommission: restaurantCommission,   // Restaurant commission (15%)
+          deliveryCommission: deliveryCommissionAmount, // Delivery commission (10%)
+          platformEarnings: platformEarningsAmount,     // Total company earnings
           // Pickup address (from restaurant)
           pickupAddress: restaurant.address,
           pickupLat: restaurant.lat,
@@ -198,9 +249,8 @@ router.post('/', authenticateToken, async (req, res) => {
           deliveryLat: parseFloat(deliveryLat.toString()),
           deliveryLng: parseFloat(deliveryLng.toString()),
           deliveryInstructions: deliveryInstructions || null,
-          // Driver earnings (80% of delivery fee)
-          driverEarning: parseFloat(deliveryFee?.toString() || '0') * 0.8,
-          platformCommission: parseFloat(deliveryFee?.toString() || '0') * 0.2,
+          // Driver earnings (90% of delivery fee)
+          driverEarning: deliveryFeeAmount * 0.9,
           paymentMethod: paymentMethod.toUpperCase(),
           paymentStatus: 'PENDING',
           status: 'PENDING'
@@ -251,13 +301,36 @@ router.post('/', authenticateToken, async (req, res) => {
       }
     });
 
+    // Schedule escrow processing after 1 minute (for wallet payments)
+    if (paymentMethod.toUpperCase() === 'WALLET') {
+      console.log(`\ud83d\udd52 Scheduling escrow processing for order ${order.id} in 1 minute...`);
+      setTimeout(async () => {
+        try {
+          console.log(`\ud83d\udcb0 Processing escrow payment for order ${order.id}...`);
+          const escrowPaymentService = (await import('../services/escrowPaymentService')).default;
+          const result = await escrowPaymentService.processEscrowPayment(order.id);
+          
+          if (result.success) {
+            console.log(`\u2705 Escrow payment processed for order ${order.id}:`, result.message);
+          } else {
+            console.error(`\u274c Failed to process escrow payment for order ${order.id}:`, result.message);
+          }
+        } catch (error) {
+          console.error(`\u274c Error processing escrow payment for order ${order.id}:`, error);
+        }
+      }, process.env.NODE_ENV === 'development' ? 10000 : 60000); // 10 seconds in dev, 1 minute in production
+    }
+
     res.status(201).json({
       success: true,
       data: completeOrder,
       message: 'Order created successfully'
     });
   } catch (error) {
-    console.error('Create order error:', error);
+    console.error('❌ CREATE ORDER ERROR - Full Debug Info:');
+    console.error('🔴 Error Object:', error);
+    console.error('🔴 Error Message:', error instanceof Error ? error.message : 'Unknown error');
+    console.error('🔴 Error Stack:', error instanceof Error ? error.stack : 'No stack trace');
     res.status(500).json({ success: false, message: 'Failed to create order' });
   }
 });
@@ -289,7 +362,13 @@ router.post('/:id/pay-wallet', authenticateToken, async (req, res) => {
       });
     }
 
-    const totalAmount = order.totalPrice.toNumber() + order.deliveryFee.toNumber();
+    // With NEW PRICING STRUCTURE: totalPrice already includes delivery fee
+    const totalAmount = order.totalPrice.toNumber();
+    
+    console.log('💳 WALLET PAYMENT DEBUG:');
+    console.log('📦 Items Subtotal:', order.itemsSubtotal?.toNumber() || 0);
+    console.log('🚚 Delivery Fee:', order.deliveryFee.toNumber());
+    console.log('💰 Total Amount (to deduct):', totalAmount);
 
     // Process wallet payment
     const paymentResult = await walletService.processCustomerPayment(userId, totalAmount, orderId);
@@ -343,55 +422,8 @@ router.post('/:id/pay-wallet', authenticateToken, async (req, res) => {
   }
 });
 
-// Cancel order
-router.patch('/:id/cancel', authenticateToken, async (req, res) => {
-  try {
-    const userId = req.user?.id;
-    const orderId = parseInt(req.params.id);
-    
-    if (!userId) {
-      return res.status(401).json({ success: false, message: 'User not authenticated' });
-    }
-
-    // Check if order exists and belongs to user
-    const existingOrder = await prisma.order.findFirst({
-      where: { 
-        id: orderId,
-        customerId: userId 
-      }
-    });
-
-    if (!existingOrder) {
-      return res.status(404).json({ success: false, message: 'Order not found' });
-    }
-
-    // Check if order can be cancelled
-    if (!['PENDING', 'ACCEPTED'].includes(existingOrder.status)) {
-      return res.status(400).json({ 
-        success: false, 
-        message: 'Order cannot be cancelled at this stage' 
-      });
-    }
-
-    // Update order status to cancelled
-    const cancelledOrder = await prisma.order.update({
-      where: { id: orderId },
-      data: { 
-        status: 'CANCELLED',
-        paymentStatus: 'REFUNDED'
-      }
-    });
-
-    res.json({
-      success: true,
-      data: cancelledOrder,
-      message: 'Order cancelled successfully'
-    });
-  } catch (error) {
-    console.error('Cancel order error:', error);
-    res.status(500).json({ success: false, message: 'Failed to cancel order' });
-  }
-});
+// NOTE: Order cancellation is handled by the escrow system
+// Use POST /api/escrow-orders/:id/cancel for cancellation
 
 // Mark order as delivered (for drivers)
 router.patch('/:id/deliver', authenticateToken, async (req, res) => {
@@ -403,12 +435,21 @@ router.patch('/:id/deliver', authenticateToken, async (req, res) => {
       return res.status(401).json({ success: false, message: 'User not authenticated' });
     }
 
-    // Get order details
+    // Get order details with restaurant info
     const order = await prisma.order.findFirst({
       where: { 
         id: orderId,
         driverId: driverId,
         status: 'DELIVERING'
+      },
+      include: {
+        restaurant: true,
+        customer: {
+          select: {
+            id: true,
+            name: true
+          }
+        }
       }
     });
 
@@ -419,34 +460,141 @@ router.patch('/:id/deliver', authenticateToken, async (req, res) => {
       });
     }
 
-    // Calculate driver earning (delivery fee - commission)
-    const driverEarning = order.deliveryFee.toNumber() * 0.8; // Driver gets 80% of delivery fee
+    // Calculate amounts with NEW PRICING STRUCTURE
+    const totalOrderAmount = order.totalPrice.toNumber(); // Already includes delivery fee
+    const itemsSubtotal = order.itemsSubtotal?.toNumber() || 0;
+    const restaurantCommission = order.restaurantCommission.toNumber();
+    const deliveryCommission = order.deliveryCommission.toNumber();
+    const platformEarnings = order.platformEarnings.toNumber();
+    const restaurantEarning = itemsSubtotal - restaurantCommission;
+    const driverEarning = order.driverEarning.toNumber(); // Use calculated value from order
+    
+    console.log('💰 DELIVERY PAYMENT BREAKDOWN:');
+    console.log('📦 Items Subtotal:', itemsSubtotal);
+    console.log('🚚 Delivery Fee:', order.deliveryFee.toNumber());
+    console.log('💳 Total Order Amount:', totalOrderAmount);
+    console.log('🏪 Restaurant Commission:', restaurantCommission);
+    console.log('📦 Delivery Commission:', deliveryCommission);
+    console.log('💼 Platform Earnings:', platformEarnings);
+    console.log('🏪 Restaurant Earning:', restaurantEarning);
+    console.log('🚚 Driver Earning:', driverEarning);
 
-    // Update order and credit driver in transaction
+    // Process all payments on delivery in a single transaction
     const result = await prisma.$transaction(async (tx) => {
-      // Mark order as delivered
+      // Mark order as delivered first
       const deliveredOrder = await tx.order.update({
         where: { id: orderId },
         data: { 
           status: 'DELIVERED',
-          deliveredAt: new Date()
+          deliveredAt: new Date(),
+          paymentStatus: order.paymentMethod === 'WALLET' ? 'PAID' : order.paymentStatus
         }
       });
 
-      // Credit driver wallet
-      await walletService.addDriverEarning(driverId, driverEarning, orderId);
+      // If wallet payment, process customer wallet deduction
+      if (order.paymentMethod === 'WALLET') {
+        const customerPayment = await walletService.processCustomerPayment(
+          order.customerId, 
+          totalOrderAmount, 
+          orderId
+        );
+        
+        if (!customerPayment.success) {
+          throw new Error(`Customer wallet payment failed: ${customerPayment.message}`);
+        }
+      }
+
+      // Credit restaurant wallet (items subtotal - restaurant commission)
+      if (restaurantEarning > 0) {
+        const restaurantCredit = await restaurantWalletService.addRestaurantEarning(
+          order.restaurantId,
+          itemsSubtotal,
+          restaurantCommission,
+          orderId
+        );
+        
+        if (!restaurantCredit.success) {
+          throw new Error(`Restaurant wallet credit failed: ${restaurantCredit.message}`);
+        }
+      }
+
+      // Credit driver wallet (90% of delivery fee)
+      if (driverEarning > 0) {
+        const driverCredit = await walletService.addDriverEarning(driverId, driverEarning, orderId);
+        
+        if (!driverCredit.success) {
+          throw new Error(`Driver wallet credit failed: ${driverCredit.message}`);
+        }
+      }
 
       return deliveredOrder;
     });
 
     res.json({
       success: true,
-      data: result,
-      message: `Order delivered successfully. ₹${driverEarning} credited to your wallet.`
+      data: {
+        order: result,
+        paymentBreakdown: {
+          totalAmount: totalOrderAmount,
+          itemsSubtotal: itemsSubtotal,
+          deliveryFee: order.deliveryFee.toNumber(),
+          restaurantEarning: restaurantEarning,
+          restaurantCommission: restaurantCommission,
+          deliveryCommission: deliveryCommission,
+          platformEarnings: platformEarnings,
+          driverEarning: driverEarning
+        }
+      },
+      message: `Order delivered successfully! Payments processed: Restaurant ₹${restaurantEarning.toFixed(2)}, Driver ₹${driverEarning.toFixed(2)}, Platform Earnings ₹${platformEarnings.toFixed(2)}`
     });
   } catch (error) {
     console.error('Deliver order error:', error);
-    res.status(500).json({ success: false, message: 'Failed to mark order as delivered' });
+    res.status(500).json({ 
+      success: false, 
+      message: 'Failed to mark order as delivered', 
+      error: error instanceof Error ? error.message : 'Unknown error'
+    });
+  }
+});
+
+// Manual escrow processing endpoint for testing
+router.post('/:id/process-escrow-manual', authenticateToken, async (req, res) => {
+  try {
+    const orderId = parseInt(req.params.id);
+    const userId = req.user?.id;
+    
+    if (!userId) {
+      return res.status(401).json({ success: false, message: 'User not authenticated' });
+    }
+
+    // Verify order belongs to customer (for testing)
+    const order = await prisma.order.findFirst({
+      where: { 
+        id: orderId,
+        customerId: userId 
+      }
+    });
+
+    if (!order) {
+      return res.status(404).json({ success: false, message: 'Order not found' });
+    }
+
+    // Import and use escrow service
+    const escrowPaymentService = (await import('../services/escrowPaymentService')).default;
+    const result = await escrowPaymentService.processEscrowPayment(orderId);
+    
+    if (!result.success) {
+      return res.status(400).json(result);
+    }
+
+    res.json({
+      success: true,
+      data: result.data,
+      message: result.message
+    });
+  } catch (error) {
+    console.error('Manual escrow processing error:', error);
+    res.status(500).json({ success: false, message: 'Failed to process escrow payment' });
   }
 });
 

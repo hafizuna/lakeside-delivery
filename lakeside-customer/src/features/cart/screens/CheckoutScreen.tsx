@@ -48,7 +48,7 @@ const CheckoutScreen: React.FC<CheckoutScreenProps> = ({ onBackPress, onOrderCom
   const reactNavigation = useNavigation();
   const [deliveryAddress, setDeliveryAddress] = useState('');
   const [deliveryCoordinates, setDeliveryCoordinates] = useState<LocationCoordinates | null>(null);
-  const [paymentMethod, setPaymentMethod] = useState<PaymentMethod>(PaymentMethod.CARD);
+  const [paymentMethod, setPaymentMethod] = useState<PaymentMethod>(PaymentMethod.WALLET);
   const [specialInstructions, setSpecialInstructions] = useState('');
   const [isProcessing, setIsProcessing] = useState(false);
   const [walletBalance, setWalletBalance] = useState<number>(0);
@@ -101,13 +101,22 @@ const CheckoutScreen: React.FC<CheckoutScreenProps> = ({ onBackPress, onOrderCom
     // Check wallet balance if wallet payment is selected
     if (paymentMethod === PaymentMethod.WALLET) {
       const totalAmount = state.subtotal + deliveryFeeCalculated;
+      console.log('💰 WALLET CHECK:');
+      console.log('💰 Wallet Balance:', walletBalance);
+      console.log('💰 Order Subtotal:', state.subtotal);
+      console.log('💰 Delivery Fee:', deliveryFeeCalculated);
+      console.log('💰 Total Amount Required:', totalAmount);
+      
       if (walletBalance < totalAmount) {
+        console.warn('⚠️ Insufficient wallet balance!');
         showWarning(
           'Insufficient Wallet Balance', 
           `Your wallet balance is ₹${walletBalance.toFixed(2)} but the total amount is ₹${totalAmount.toFixed(2)}. Please top up your wallet or choose a different payment method.`
         );
         return;
       }
+      
+      console.log('✅ Wallet balance sufficient');
     }
 
     setIsProcessing(true);
@@ -117,14 +126,16 @@ const CheckoutScreen: React.FC<CheckoutScreenProps> = ({ onBackPress, onOrderCom
       const restaurantId = state.items[0].restaurantId;
       
       // Prepare order data with real coordinates
+      // Note: Backend expects totalPrice to be the subtotal (without delivery fee)
+      // Backend will add delivery fee to totalPrice to get the final amount
       const orderData = {
         restaurantId,
         items: state.items.map(item => ({
-          menuId: item.id,
+          menuId: item.menuId, // Use menuId instead of id
           quantity: item.quantity,
           price: item.price
         })),
-        totalPrice: state.subtotal + deliveryFeeCalculated,
+        totalPrice: state.subtotal, // Send subtotal only, backend will add delivery fee
         deliveryFee: deliveryFeeCalculated,
         deliveryAddress,
         deliveryLat: deliveryCoordinates!.latitude,
@@ -133,11 +144,21 @@ const CheckoutScreen: React.FC<CheckoutScreenProps> = ({ onBackPress, onOrderCom
         paymentMethod: paymentMethod
       };
 
-      console.log('Creating order:', orderData);
+      console.log('🚀 CREATING ORDER - Full Debug Info:');
+      console.log('📋 Order Data:', JSON.stringify(orderData, null, 2));
+      console.log('🏪 Restaurant ID:', restaurantId);
+      console.log('🛒 Cart Items:', JSON.stringify(state.items, null, 2));
+      console.log('💰 Payment Method:', paymentMethod);
+      console.log('📍 Delivery Address:', deliveryAddress);
+      console.log('📍 Delivery Coordinates:', deliveryCoordinates);
+      console.log('💸 Delivery Fee:', deliveryFeeCalculated);
+      console.log('💵 Subtotal:', state.subtotal);
+      console.log('💳 Total Price:', state.subtotal + deliveryFeeCalculated);
       
       // Create order via API
+      console.log('🌐 Making API call to create order...');
       const response = await orderAPI.createOrder(orderData);
-      console.log('Order response:', response);
+      console.log('✅ Order API Response:', JSON.stringify(response, null, 2));
       
       if (response.success) {
         // Clear cart immediately
@@ -157,8 +178,22 @@ const CheckoutScreen: React.FC<CheckoutScreenProps> = ({ onBackPress, onOrderCom
         throw new Error('Failed to create order');
       }
     } catch (error: any) {
-      console.error('Order creation error:', error);
-      const errorMessage = error.message || 'Failed to place order. Please try again.';
+      console.error('❌ ORDER CREATION ERROR - Full Debug Info:');
+      console.error('🔴 Error Object:', error);
+      console.error('🔴 Error Message:', error.message);
+      console.error('🔴 Error Response:', error.response);
+      console.error('🔴 Error Response Data:', error.response?.data);
+      console.error('🔴 Error Response Status:', error.response?.status);
+      console.error('🔴 Error Response Headers:', error.response?.headers);
+      console.error('🔴 Error Config:', error.config);
+      
+      let errorMessage = 'Failed to place order. Please try again.';
+      if (error.response?.data?.message) {
+        errorMessage = error.response.data.message;
+      } else if (error.message) {
+        errorMessage = error.message;
+      }
+      
       showError('Order Failed', errorMessage);
     } finally {
       setIsProcessing(false);
@@ -197,23 +232,23 @@ const CheckoutScreen: React.FC<CheckoutScreenProps> = ({ onBackPress, onOrderCom
             <Text style={styles.itemName}>{item.itemName}</Text>
             <Text style={styles.itemQuantity}>Qty: {item.quantity}</Text>
           </View>
-          <Text style={styles.itemPrice}>${(item.price * item.quantity).toFixed(2)}</Text>
+          <Text style={styles.itemPrice}>₹{(item.price * item.quantity).toFixed(2)}</Text>
         </View>
       ))}
 
       <View style={styles.summaryRow}>
         <Text style={styles.summaryLabel}>Subtotal</Text>
-        <Text style={styles.summaryValue}>${state.subtotal.toFixed(2)}</Text>
+        <Text style={styles.summaryValue}>₹{state.subtotal.toFixed(2)}</Text>
       </View>
       
       <View style={styles.summaryRow}>
         <Text style={styles.summaryLabel}>Delivery Fee</Text>
-        <Text style={styles.summaryValue}>${deliveryFeeCalculated.toFixed(2)}</Text>
+        <Text style={styles.summaryValue}>₹{deliveryFeeCalculated.toFixed(2)}</Text>
       </View>
       
       <View style={[styles.summaryRow, styles.totalRow]}>
         <Text style={styles.totalLabel}>Total</Text>
-        <Text style={styles.totalValue}>${(state.subtotal + deliveryFeeCalculated).toFixed(2)}</Text>
+        <Text style={styles.totalValue}>₹{(state.subtotal + deliveryFeeCalculated).toFixed(2)}</Text>
       </View>
     </View>
   );
@@ -241,36 +276,19 @@ const CheckoutScreen: React.FC<CheckoutScreenProps> = ({ onBackPress, onOrderCom
     <View style={styles.section}>
       <Text style={styles.sectionTitle}>Payment Method</Text>
       
+      {/* Credit/Debit Card option removed */}
+      {/* Cash on Delivery disabled */}
       <TouchableOpacity
-        style={[styles.paymentOption, paymentMethod === PaymentMethod.CARD && styles.selectedPayment]}
-        onPress={() => setPaymentMethod(PaymentMethod.CARD)}
-      >
-        <CreditCardIcon 
-          size={24} 
-          color={paymentMethod === PaymentMethod.CARD ? Colors.primary.main : Colors.text.secondary} 
-        />
-        <Text style={[styles.paymentText, paymentMethod === PaymentMethod.CARD && styles.selectedPaymentText]}>
-          Credit/Debit Card
-        </Text>
-        {paymentMethod === PaymentMethod.CARD && (
-          <CheckIcon size={20} color={Colors.primary.main} />
-        )}
-      </TouchableOpacity>
-
-      <TouchableOpacity
-        style={[styles.paymentOption, paymentMethod === PaymentMethod.CASH && styles.selectedPayment]}
-        onPress={() => setPaymentMethod(PaymentMethod.CASH)}
+        style={[styles.paymentOption, styles.disabledPayment]}
+        disabled={true}
       >
         <CashIcon 
           size={24} 
-          color={paymentMethod === PaymentMethod.CASH ? Colors.primary.main : Colors.text.secondary} 
+          color={Colors.text.light} 
         />
-        <Text style={[styles.paymentText, paymentMethod === PaymentMethod.CASH && styles.selectedPaymentText]}>
-          Cash on Delivery
+        <Text style={[styles.paymentText, styles.disabledPaymentText]}>
+          Cash on Delivery (Coming Soon)
         </Text>
-        {paymentMethod === PaymentMethod.CASH && (
-          <CheckIcon size={20} color={Colors.primary.main} />
-        )}
       </TouchableOpacity>
 
       {/* Wallet Payment Option */}

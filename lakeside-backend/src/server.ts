@@ -15,6 +15,7 @@ import orderRoutes from './routes/order';
 import walletRoutes from './routes/wallet';
 import driverRoutes from './routes/driver';
 import ratingRoutes from './routes/rating';
+import escrowOrderRoutes from './routes/escrowOrderRoutes';
 
 const app = express();
 const PORT = process.env.PORT || 3001;
@@ -36,6 +37,7 @@ app.use('/api/orders', orderRoutes);
 app.use('/api/wallet', walletRoutes);
 app.use('/api/driver', driverRoutes);
 app.use('/api/ratings', ratingRoutes);
+app.use('/api/escrow-orders', escrowOrderRoutes);
 
 // Health check endpoint
 app.get('/api/health', (req, res) => {
@@ -69,5 +71,5 @@ app.listen(Number(PORT), '0.0.0.0', () => {
   console.log(`🚀 Lakeside Backend running on port ${PORT}`);
   console.log(`📍 Health check: http://localhost:${PORT}/api/health`);
   console.log(`🔐 Auth endpoints: http://localhost:${PORT}/api/auth/*`);
-  console.log(`📱 Mobile access: http://192.168.1.3:${PORT}/api/auth/*`);
+  console.log(`📱 Mobile access: http://192.168.1.11:${PORT}/api/auth/*`);
 });

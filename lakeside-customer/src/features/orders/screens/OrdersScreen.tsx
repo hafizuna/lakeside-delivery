@@ -115,30 +115,8 @@ const OrdersScreen: React.FC<OrdersScreenProps> = ({ navigation }) => {
     setRefreshing(false);
   };
 
-  const handleCancelOrder = async (orderId: number) => {
-    Alert.alert(
-      'Cancel Order',
-      'Are you sure you want to cancel this order?',
-      [
-        { text: 'No', style: 'cancel' },
-        {
-          text: 'Yes, Cancel',
-          style: 'destructive',
-          onPress: async () => {
-            try {
-              const response = await orderAPI.cancelOrder(orderId);
-              if (response.success) {
-                Alert.alert('Success', 'Order cancelled successfully');
-                loadOrders();
-              }
-            } catch (error) {
-              Alert.alert('Error', 'Failed to cancel order. Please try again.');
-            }
-          },
-        },
-      ]
-    );
-  };
+  // NOTE: Order cancellation is now handled in OrderDetailScreen via escrow API
+  // Users can tap on an order to view details and cancel from there if allowed
 
   const getStatusIcon = (status: OrderStatus) => {
     const iconProps = { size: 16, color: Colors.background.primary };
@@ -279,7 +257,6 @@ const OrdersScreen: React.FC<OrdersScreenProps> = ({ navigation }) => {
   );
 
   const renderOrderItem = ({ item }: { item: Order }) => {
-    const canCancel = item.status === OrderStatus.PENDING || item.status === OrderStatus.ACCEPTED || item.status === OrderStatus.PREPARING;
     const isActiveOrder = [
       OrderStatus.PENDING,
       OrderStatus.ACCEPTED,
@@ -351,15 +328,7 @@ const OrdersScreen: React.FC<OrdersScreenProps> = ({ navigation }) => {
           </View>
           
           <View style={styles.orderActions}>
-            {/* Active Order Actions */}
-            {isActiveOrder && canCancel && (
-              <TouchableOpacity
-                style={styles.cancelButton}
-                onPress={() => handleCancelOrder(item.id)}
-              >
-                <Text style={styles.cancelButtonText}>Cancel</Text>
-              </TouchableOpacity>
-            )}
+            {/* Active Order Actions - Cancellation handled in OrderDetailScreen */}
             
             {/* History Order Actions - Rating Buttons Only */}
             {isHistoryOrder && item.status === OrderStatus.DELIVERED && (

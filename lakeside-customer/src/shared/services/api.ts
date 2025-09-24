@@ -10,7 +10,7 @@ const getApiBaseUrl = () => {
   } else {
     // For mobile devices, use your computer's IP address
     // You may need to update this IP if your network changes
-    return 'http://192.168.1.11:3001/api';
+    return 'http://192.168.1.8:3001/api';
   }
 };
 
@@ -248,27 +248,29 @@ export const orderAPI = {
     paymentMethod: string;
   }): Promise<{ success: boolean; data: import('../types/Order').Order }> {
     try {
-      console.log('Calling createOrder API...');
+      console.log('🌐 API: Calling createOrder...');
+      console.log('🌐 API: Base URL:', api.defaults.baseURL);
+      console.log('🌐 API: Endpoint: /orders');
+      console.log('🌐 API: Order Data:', JSON.stringify(orderData, null, 2));
+      
       const response = await api.post('/orders', orderData);
-      console.log('createOrder response:', response.data);
+      
+      console.log('✅ API: createOrder response status:', response.status);
+      console.log('✅ API: createOrder response data:', JSON.stringify(response.data, null, 2));
       return response.data;
-    } catch (error) {
-      console.error('createOrder error:', error);
+    } catch (error: any) {
+      console.error('❌ API: createOrder error details:');
+      console.error('❌ API: Error:', error);
+      console.error('❌ API: Error message:', error.message);
+      console.error('❌ API: Error response:', error.response);
+      console.error('❌ API: Error response status:', error.response?.status);
+      console.error('❌ API: Error response data:', error.response?.data);
       throw error;
     }
   },
 
-  async cancelOrder(orderId: number): Promise<{ success: boolean; message: string }> {
-    try {
-      console.log('Calling cancelOrder API...');
-      const response = await api.patch(`/orders/${orderId}/cancel`);
-      console.log('cancelOrder response:', response.data);
-      return response.data;
-    } catch (error) {
-      console.error('cancelOrder error:', error);
-      throw error;
-    }
-  }
+// NOTE: Order cancellation is now handled by the escrow API
+  // See escrowAPI.cancelOrder() in OrderDetailScreen.tsx
 };
 
 // Wallet API Functions

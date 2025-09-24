@@ -366,9 +366,9 @@ export const NotificationProvider: React.FC<NotificationProviderProps> = ({ chil
             orderId: order.id.toString(),
             restaurantName: order.restaurant?.name || 'Restaurant',
             orderStatus: order.status,
-            estimatedTime: order.estimatedDelivery ? 
-              new Date(order.estimatedDelivery).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : 
-              undefined,
+            estimatedTime: order.estimatedDeliveryTime ?
+              new Date(Date.now() + order.estimatedDeliveryTime * 60000).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) :
+              'Calculating...'
           });
           console.log('🔔 Push notification sent successfully');
         } catch (error) {

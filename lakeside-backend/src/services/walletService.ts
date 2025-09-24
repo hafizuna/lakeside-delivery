@@ -289,6 +289,44 @@ class WalletService {
     }
   }
 
+  async addCustomerRefund(customerId: number, amount: number, orderId?: number, reason?: string): Promise<ServiceResponse> {
+    try {
+      const result = await prisma.$transaction(async (tx) => {
+        // Update customer wallet
+        const wallet = await tx.customerWallet.upsert({
+          where: { customerId },
+          create: {
+            customerId,
+            balance: amount,
+            totalTopUps: amount
+          },
+          update: {
+            balance: { increment: amount }
+          }
+        });
+
+        // Create refund transaction
+        const transaction = await tx.walletTransaction.create({
+          data: {
+            customerId,
+            amount,
+            type: 'CUSTOMER_REFUND',
+            status: 'APPROVED',
+            description: orderId ? `Refund for order #${orderId}${reason ? ': ' + reason : ''}` : `Refund${reason ? ': ' + reason : ''}`,
+            processedAt: new Date()
+          }
+        });
+
+        return { wallet, transaction };
+      });
+
+      return { success: true, data: result, message: 'Refund processed successfully' };
+    } catch (error) {
+      console.error('Error processing customer refund:', error);
+      return { success: false, message: 'Failed to process refund' };
+    }
+  }
+
   // Transaction Management
   async getTransactionHistory(userId: number, userType: 'customer' | 'driver' = 'customer', page: number = 1, limit: number = 20): Promise<ServiceResponse> {
     try {

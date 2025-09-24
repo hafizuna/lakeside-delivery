@@ -12,6 +12,7 @@ declare class WalletService {
     getDriverWallet(driverId: number): Promise<ServiceResponse>;
     addDriverEarning(driverId: number, amount: number, orderId?: number): Promise<ServiceResponse>;
     requestDriverWithdrawal(driverId: number, amount: number): Promise<ServiceResponse>;
+    addCustomerRefund(customerId: number, amount: number, orderId?: number, reason?: string): Promise<ServiceResponse>;
     getTransactionHistory(userId: number, userType?: 'customer' | 'driver', page?: number, limit?: number): Promise<ServiceResponse>;
     getPendingTransactions(page?: number, limit?: number): Promise<ServiceResponse>;
     approveTransaction(transactionId: number, adminId: number, adminNotes?: string): Promise<ServiceResponse>;

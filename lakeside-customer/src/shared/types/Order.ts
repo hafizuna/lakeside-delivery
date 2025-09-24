@@ -28,9 +28,17 @@ export interface Order {
   customerId: number;
   restaurantId: number;
   driverId?: number;
-  totalPrice: number;
-  deliveryFee: number;
-  commission: number;
+  
+  // NEW PRICING STRUCTURE
+  itemsSubtotal: number;        // Food items price only
+  deliveryFee: number;          // Delivery cost
+  totalPrice: number;           // itemsSubtotal + deliveryFee
+  
+  // COMMISSION STRUCTURE
+  restaurantCommission: number; // Restaurant commission (15%)
+  deliveryCommission: number;   // Delivery commission (10%)
+  platformEarnings: number;     // Total company earnings
+  
   status: OrderStatus;
   
   // Restaurant Pickup Information
@@ -48,7 +56,6 @@ export interface Order {
   
   // Driver Earnings & Distance
   driverEarning: number;
-  platformCommission: number;
   deliveryDistance?: number;
   estimatedDeliveryTime?: number;
   
@@ -63,7 +70,6 @@ export interface Order {
   preparingAt?: string;
   pickedUpAt?: string;
   deliveredAt?: string;
-  estimatedDelivery?: string;
   
   // Relations
   restaurant: {

@@ -130,9 +130,26 @@ router.post('/orders/:id/accept', authenticateToken, async (req, res) => {
       });
     }
 
-    // Calculate driver earnings and distance
-    const driverEarning = 40; // Base delivery fee
-    const platformCommission = 10; // Platform commission
+    // Get order details for earnings calculation
+    const orderToAccept = await prisma.order.findUnique({
+      where: { id: orderId },
+      select: { deliveryFee: true, deliveryCommission: true, driverEarning: true }
+    });
+    
+    if (!orderToAccept) {
+      return res.status(404).json({ success: false, message: 'Order not found' });
+    }
+    
+    // Use existing calculated values from order creation
+    const driverEarning = orderToAccept.driverEarning.toNumber();
+    const deliveryCommission = orderToAccept.deliveryCommission.toNumber();
+    
+    console.log('🚚 DRIVER ASSIGNMENT:', {
+      orderId: orderId,
+      driverId: driverId,
+      driverEarning: driverEarning,
+      deliveryCommission: deliveryCommission
+    });
     
     // ATOMIC ASSIGNMENT: Assign driver to order without changing status
     // This prevents race conditions - only one driver can be assigned
@@ -144,9 +161,7 @@ router.post('/orders/:id/accept', authenticateToken, async (req, res) => {
       },
       data: {
         driverId: driverId,
-        driverEarning: driverEarning,
-        platformCommission: platformCommission,
-        // No status change - stays PREPARING or READY
+        // Keep existing driverEarning and deliveryCommission (already calculated)
         estimatedPickupTime: new Date(Date.now() + 15 * 60 * 1000) // 15 minutes from now
       }
     });

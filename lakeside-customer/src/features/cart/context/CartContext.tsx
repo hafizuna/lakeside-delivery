@@ -35,7 +35,7 @@ const initialState: CartState = {
   restaurantName: null,
   totalItems: 0,
   subtotal: 0,
-  deliveryFee: 2.99,
+  deliveryFee: 0.00, // No delivery fee shown in cart
   total: 0,
 };
 
@@ -52,7 +52,7 @@ const calculateTotals = (items: CartItem[], deliveryFee: number): Pick<CartState
     const itemPrice = safePrice(item.price);
     return sum + (itemPrice * item.quantity);
   }, 0);
-  const total = subtotal + (totalItems > 0 ? deliveryFee : 0);
+  const total = subtotal; // No delivery fee in cart total
   
   return { totalItems, subtotal, total };
 };

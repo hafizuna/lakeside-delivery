@@ -176,11 +176,6 @@ const CartScreen: React.FC<CartScreenProps> = ({ onBackPress, onCheckout }) => {
         <Text style={styles.summaryValue}>${state.subtotal.toFixed(2)}</Text>
       </View>
       
-      <View style={styles.summaryRow}>
-        <Text style={styles.summaryLabel}>Delivery Fee</Text>
-        <Text style={styles.summaryValue}>${state.deliveryFee.toFixed(2)}</Text>
-      </View>
-      
       <View style={[styles.summaryRow, styles.totalRow]}>
         <Text style={styles.totalLabel}>Total</Text>
         <Text style={styles.totalValue}>${state.total.toFixed(2)}</Text>

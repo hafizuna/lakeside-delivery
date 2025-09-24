@@ -593,6 +593,28 @@ export const BellIcon: React.FC<IconProps> = ({ size = 24, color = '#FF6B35' }) 
   </Svg>
 );
 
+export const AlertIcon: React.FC<IconProps> = ({ size = 24, color = '#FFA726' }) => (
+  <Svg width={size} height={size} viewBox="0 0 24 24" fill="none">
+    <Defs>
+      <LinearGradient id="alertGradient" x1="0%" y1="0%" x2="100%" y2="100%">
+        <Stop offset="0%" stopColor="#FFA726" />
+        <Stop offset="100%" stopColor="#FF8F00" />
+      </LinearGradient>
+    </Defs>
+    <Path
+      d="M12 2L1 21h22L12 2z"
+      fill="url(#alertGradient)"
+    />
+    <Path
+      d="M12 9v4M12 17h.01"
+      stroke="white"
+      strokeWidth="2"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+    />
+  </Svg>
+);
+
 export const LogoutIcon: React.FC<IconProps> = ({ size = 24, color = '#F44336' }) => (
   <Svg width={size} height={size} viewBox="0 0 24 24" fill="none">
     <Defs>

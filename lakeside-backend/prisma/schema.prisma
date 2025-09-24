@@ -90,6 +90,7 @@ model Restaurant {
   orders         Order[]
   supportTickets SupportTicket[]
   ratings        Rating[] @relation("RestaurantRatings")
+  restaurantWallet RestaurantWallet?
   
   @@map("restaurants")
 }
@@ -117,9 +118,17 @@ model Order {
   customerId   Int         @map("customer_id")
   restaurantId Int         @map("restaurant_id")
   driverId     Int?        @map("driver_id")
-  totalPrice   Decimal     @map("total_price") @db.Decimal(10, 2)
-  deliveryFee  Decimal     @map("delivery_fee") @db.Decimal(10, 2)
-  commission   Decimal     @map("commission") @db.Decimal(10, 2)
+  
+  // NEW PRICING STRUCTURE
+  itemsSubtotal    Decimal     @default(0.00) @map("items_subtotal") @db.Decimal(10, 2)    // Food items price only
+  deliveryFee      Decimal     @map("delivery_fee") @db.Decimal(10, 2)                      // Delivery cost
+  totalPrice       Decimal     @map("total_price") @db.Decimal(10, 2)                       // itemsSubtotal + deliveryFee
+  
+  // COMMISSION STRUCTURE
+  restaurantCommission Decimal  @map("restaurant_commission") @db.Decimal(10, 2)              // Restaurant commission (15%)
+  deliveryCommission   Decimal  @default(0.00) @map("delivery_commission") @db.Decimal(10, 2) // 10% of deliveryFee
+  platformEarnings     Decimal  @default(0.00) @map("platform_earnings") @db.Decimal(10, 2)   // restaurantCommission + deliveryCommission
+  
   status       OrderStatus @default(PENDING)
   orderRating  Float?      @default(0.0) @map("order_rating")
   
@@ -138,7 +147,6 @@ model Order {
   
   // Driver Earnings & Distance (CRITICAL - Driver needs earnings info!)
   driverEarning        Decimal  @default(0.00) @map("driver_earning") @db.Decimal(10, 2)
-  platformCommission   Decimal  @default(0.00) @map("platform_commission") @db.Decimal(10, 2)
   deliveryDistance     Decimal? @map("delivery_distance") @db.Decimal(8, 2) // km
   estimatedDeliveryTime Int?    @map("estimated_delivery_time") // minutes
   
@@ -153,7 +161,6 @@ model Order {
   preparingAt       DateTime? @map("preparing_at")
   pickedUpAt        DateTime? @map("picked_up_at")
   deliveredAt       DateTime? @map("delivered_at")
-  estimatedDelivery DateTime? @map("estimated_delivery")
   
   customer   User       @relation("CustomerOrders", fields: [customerId], references: [id])
   restaurant Restaurant @relation(fields: [restaurantId], references: [id])
@@ -211,6 +218,23 @@ model CustomerWallet {
   customer User @relation(fields: [customerId], references: [id], onDelete: Cascade)
   
   @@map("customer_wallets")
+}
+
+// Restaurant Wallet - For commission earnings and payouts
+model RestaurantWallet {
+  restaurantId         Int      @id @map("restaurant_id")
+  balance              Decimal  @default(0.00) @map("balance") @db.Decimal(10, 2)
+  totalEarnings        Decimal  @default(0.00) @map("total_earnings") @db.Decimal(10, 2)
+  totalCommissionPaid  Decimal  @default(0.00) @map("total_commission_paid") @db.Decimal(10, 2)
+  totalPayouts         Decimal  @default(0.00) @map("total_payouts") @db.Decimal(10, 2)
+  isActive             Boolean  @default(true) @map("is_active")
+  lastEarningAt        DateTime? @map("last_earning_at")
+  createdAt            DateTime @default(now()) @map("created_at")
+  updatedAt            DateTime @updatedAt @map("updated_at")
+  
+  restaurant Restaurant @relation(fields: [restaurantId], references: [id], onDelete: Cascade)
+  
+  @@map("restaurant_wallets")
 }
 
 // Driver Wallet - For delivery earnings and collateral
@@ -423,6 +447,7 @@ enum PaymentMethod {
 
 enum PaymentStatus {
   PENDING
+  ESCROWED
   PAID
   FAILED
   REFUNDED
@@ -439,6 +464,11 @@ enum WalletTransactionType {
   DRIVER_EARNING
   DRIVER_WITHDRAWAL
   DRIVER_PENALTY
+  
+  // Restaurant Transactions
+  RESTAURANT_ORDER_EARNING
+  RESTAURANT_COMMISSION_DEDUCTION
+  RESTAURANT_PAYOUT
   
   // General Transactions
   CREDIT
