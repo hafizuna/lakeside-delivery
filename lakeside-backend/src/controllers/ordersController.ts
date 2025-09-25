@@ -1,6 +1,7 @@
 import { Request, Response } from 'express';
 import { PrismaClient } from '@prisma/client';
 import { AuthenticatedRequest } from '../types/auth';
+import socketService from '../services/socketService';
 
 const prisma = new PrismaClient();
 
@@ -166,7 +167,21 @@ export const updateOrderStatus = async (req: AuthenticatedRequest, res: Response
             phone: true,
           },
         },
+        restaurant: {
+          select: {
+            id: true,
+            name: true,
+          },
+        },
       },
+    });
+
+    // Emit real-time order status update
+    socketService.emitOrderUpdate(updatedOrder, `Order status updated to ${status}`);
+    console.log('📡 Socket event emitted for order status update:', {
+      orderId: updatedOrder.id,
+      newStatus: status,
+      customerId: updatedOrder.customerId
     });
 
     // Transform order to include calculated fields

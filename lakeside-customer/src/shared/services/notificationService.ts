@@ -99,12 +99,29 @@ class NotificationService {
         return null;
       }
 
+      console.log('🔔 Checking notification permissions...');
       const { status: existingStatus } = await Notifications.getPermissionsAsync();
+      console.log('🔔 Current permission status:', existingStatus);
+      
       let finalStatus = existingStatus;
 
+      // Always request permissions if not granted, or if this is a fresh install
       if (existingStatus !== 'granted') {
-        const { status } = await Notifications.requestPermissionsAsync();
+        console.log('🔔 Requesting notification permissions...');
+        const { status } = await Notifications.requestPermissionsAsync({
+          ios: {
+            allowAlert: true,
+            allowBadge: true,
+            allowSound: true,
+            allowDisplayInCarPlay: true,
+            allowCriticalAlerts: false,
+            provideAppNotificationSettings: true,
+            allowProvisional: false,
+            allowAnnouncements: false,
+          }
+        });
         finalStatus = status;
+        console.log('🔔 Permission request result:', finalStatus);
       }
 
       if (finalStatus !== 'granted') {
@@ -119,7 +136,9 @@ class NotificationService {
         return null;
       }
 
-      const token = (await Notifications.getExpoPushTokenAsync()).data;
+      const token = (await Notifications.getExpoPushTokenAsync({
+        projectId: '550e8400-e29b-41d4-a716-446655440000', // From app.json
+      })).data;
       this.expoPushToken = token;
       
       // Save token for future use

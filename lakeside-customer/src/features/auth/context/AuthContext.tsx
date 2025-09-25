@@ -2,6 +2,7 @@ import React, { createContext, useContext, useState, useEffect, ReactNode } from
 import { authAPI, tokenManager, User } from '../../../shared/services/api';
 import { normalizeEthiopianPhone } from '../../../shared/utils/phoneUtils';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import socketService from '../../../shared/services/socketService';
 
 interface AuthContextType {
   user: User | null;
@@ -113,6 +114,34 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
   useEffect(() => {
     checkAuthState();
   }, []);
+
+  // Auto-connect Socket.IO when user is authenticated
+  useEffect(() => {
+    if (user && !isLoading) {
+      console.log('🔌 User authenticated, connecting Socket.IO...');
+      
+      // Connect to Socket.IO with a small delay to ensure auth token is ready
+      const connectSocket = async () => {
+        try {
+          const connected = await socketService.connect();
+          if (connected) {
+            console.log('✅ Socket.IO connected successfully for user:', user.id);
+          } else {
+            console.warn('⚠️ Socket.IO connection failed for user:', user.id);
+          }
+        } catch (error) {
+          console.error('❌ Socket.IO connection error:', error);
+        }
+      };
+
+      // Small delay to ensure authentication is fully complete
+      setTimeout(connectSocket, 1000);
+    } else if (!user && !isLoading) {
+      // User logged out, disconnect Socket.IO
+      console.log('🔌 User logged out, disconnecting Socket.IO...');
+      socketService.disconnect();
+    }
+  }, [user, isLoading]);
 
   const value: AuthContextType = {
     user,

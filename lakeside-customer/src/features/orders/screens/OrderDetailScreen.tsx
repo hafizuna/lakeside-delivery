@@ -35,7 +35,7 @@ import { tokenManager } from '../../../shared/services/api';
 // Escrow API endpoints
 const escrowAPI = {
   checkCancellation: async (orderId: number) => {
-    const response = await fetch(`http://192.168.1.8:3001/api/escrow-orders/${orderId}/cancellation-info`, {
+    const response = await fetch(`http://192.168.1.5:3001/api/escrow-orders/${orderId}/cancellation-info`, {
       method: 'GET',
       headers: {
         'Content-Type': 'application/json',
@@ -46,7 +46,7 @@ const escrowAPI = {
   },
   
   cancelOrder: async (orderId: number, reason?: string) => {
-    const response = await fetch(`http://192.168.1.8:3001/api/escrow-orders/${orderId}/cancel`, {
+    const response = await fetch(`http://192.168.1.5:3001/api/escrow-orders/${orderId}/cancel`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
@@ -73,11 +73,12 @@ interface CancellationStatus {
 }
 
 const OrderDetailScreen: React.FC<OrderDetailScreenProps> = ({ orderId, onBackPress }) => {
-  // Use real-time order updates hook
+  // Use real-time order updates hook with socket support
   const { order, loading, error, refetch } = useOrderUpdates({
     orderId,
     enabled: true,
-    pollingInterval: 15000 // Poll every 15 seconds for active orders
+    enableRealTime: true, // Enable real-time socket updates
+    fallbackPollingInterval: 30000 // Fallback polling every 30 seconds if socket fails
   });
   const { showSuccess, showError, showWarning } = useToast();
   
@@ -96,13 +97,18 @@ const OrderDetailScreen: React.FC<OrderDetailScreenProps> = ({ orderId, onBackPr
   const [isSubmittingRating, setIsSubmittingRating] = useState(false);
   const [ratingStates, setRatingStates] = useState<{hasRatedOrder: boolean, hasRatedRestaurant: boolean, hasRatedDriver: boolean}>({hasRatedOrder: false, hasRatedRestaurant: false, hasRatedDriver: false});
 
-  // Load cancellation status when order changes
+  // Load cancellation status when order changes (real-time via socket now, but keep initial load)
   useEffect(() => {
     if (order && order.status !== OrderStatus.DELIVERED && order.status !== OrderStatus.CANCELLED) {
       loadCancellationStatus();
-      // Set up interval to check cancellation status every 30 seconds
-      const interval = setInterval(loadCancellationStatus, 30000);
-      return () => clearInterval(interval);
+      // Real-time updates via socket eliminate the need for polling cancellation status
+      // Only poll as fallback if socket is not working
+      const shouldFallbackPoll = false; // Socket handles real-time cancellation updates
+      
+      if (shouldFallbackPoll) {
+        const interval = setInterval(loadCancellationStatus, 60000); // Reduced frequency
+        return () => clearInterval(interval);
+      }
     }
   }, [order?.id, order?.status]);
 

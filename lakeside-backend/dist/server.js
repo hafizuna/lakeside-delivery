@@ -8,6 +8,8 @@ const cors_1 = __importDefault(require("cors"));
 const helmet_1 = __importDefault(require("helmet"));
 const dotenv_1 = __importDefault(require("dotenv"));
 const path_1 = __importDefault(require("path"));
+const http_1 = require("http");
+const socketService_1 = __importDefault(require("./services/socketService"));
 // Load environment variables first
 dotenv_1.default.config({ path: path_1.default.join(__dirname, '../.env') });
 // Import routes
@@ -21,6 +23,7 @@ const rating_1 = __importDefault(require("./routes/rating"));
 const escrowOrderRoutes_1 = __importDefault(require("./routes/escrowOrderRoutes"));
 const app = (0, express_1.default)();
 const PORT = process.env.PORT || 3001;
+const httpServer = (0, http_1.createServer)(app);
 // Middleware
 app.use((0, helmet_1.default)());
 app.use((0, cors_1.default)({
@@ -62,11 +65,15 @@ app.use((err, req, res, next) => {
         error: process.env.NODE_ENV === 'development' ? err.message : undefined
     });
 });
+// Initialize Socket.IO
+socketService_1.default.initialize(httpServer);
 // Start server
-app.listen(Number(PORT), '0.0.0.0', () => {
+httpServer.listen(Number(PORT), '0.0.0.0', () => {
     console.log(`🚀 Lakeside Backend running on port ${PORT}`);
     console.log(`📍 Health check: http://localhost:${PORT}/api/health`);
     console.log(`🔐 Auth endpoints: http://localhost:${PORT}/api/auth/*`);
     console.log(`📱 Mobile access: http://192.168.1.11:${PORT}/api/auth/*`);
+    console.log(`🔌 Socket.IO server ready at ws://localhost:${PORT}`);
+    console.log(`📡 Real-time updates enabled`);
 });
 //# sourceMappingURL=server.js.map

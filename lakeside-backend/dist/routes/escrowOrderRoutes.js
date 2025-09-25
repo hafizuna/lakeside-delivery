@@ -7,6 +7,7 @@ const express_1 = require("express");
 const auth_1 = require("../middleware/auth");
 const client_1 = require("@prisma/client");
 const escrowPaymentService_1 = __importDefault(require("../services/escrowPaymentService"));
+const socketService_1 = __importDefault(require("../services/socketService"));
 const router = (0, express_1.Router)();
 const prisma = new client_1.PrismaClient();
 /**
@@ -91,6 +92,21 @@ router.post('/:id/cancel', auth_1.authenticateToken, async (req, res) => {
         if (!result.success) {
             return res.status(400).json(result);
         }
+        // Emit real-time order cancellation event
+        socketService_1.default.emitOrderCancellation(orderId, order.customerId, cancelReason, result.data?.refundAmount);
+        // Also emit order status update with CANCELLED status
+        const cancelledOrder = {
+            ...order,
+            status: 'CANCELLED',
+            restaurant: { name: 'Restaurant' } // Fallback name
+        };
+        socketService_1.default.emitOrderUpdate(cancelledOrder, `Order cancelled: ${cancelReason}`);
+        console.log('📡 Socket events emitted for order cancellation:', {
+            orderId,
+            customerId: order.customerId,
+            reason: cancelReason,
+            refundAmount: result.data?.refundAmount
+        });
         res.json({
             success: true,
             data: result.data,
@@ -152,6 +168,7 @@ router.post('/:id/accept', auth_1.authenticateToken, async (req, res) => {
             include: {
                 restaurant: {
                     select: {
+                        id: true,
                         name: true
                     }
                 },
@@ -162,6 +179,13 @@ router.post('/:id/accept', auth_1.authenticateToken, async (req, res) => {
                     }
                 }
             }
+        });
+        // Emit real-time order status update for acceptance
+        socketService_1.default.emitOrderUpdate(acceptedOrder, 'Your order has been accepted by the restaurant!');
+        console.log('📡 Socket event emitted for order acceptance:', {
+            orderId: acceptedOrder.id,
+            customerId: acceptedOrder.customerId,
+            restaurantName: acceptedOrder.restaurant.name
         });
         res.json({
             success: true,

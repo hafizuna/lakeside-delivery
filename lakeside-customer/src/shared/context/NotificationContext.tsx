@@ -1,11 +1,13 @@
-import React, { createContext, useContext, useState, useEffect, ReactNode } from 'react';
-import { Alert } from 'react-native';
+import React, { createContext, useContext, useState, useEffect, useRef, ReactNode } from 'react';
+import { Alert, AppState } from 'react-native';
 import { Order, OrderStatus } from '../types/Order';
 import NotificationService, { 
   NotificationSettings, 
   OrderNotificationData, 
   WalletNotificationData 
 } from '../services/notificationService';
+import socketService from '../services/socketService';
+import { OrderStatusUpdateData, SocketConnectionState } from '../types/socket';
 
 interface Notification {
   id: string;
@@ -38,6 +40,11 @@ interface NotificationContextType {
   getPushToken: () => string | null;
   isNotificationServiceReady: boolean;
   
+  // Real-time socket connection
+  socketConnectionState: SocketConnectionState;
+  connectSocket: () => Promise<void>;
+  disconnectSocket: () => void;
+  
   // Debug functions
   testOrderStatusNotification: (status: OrderStatus) => Promise<void>;
   getNotificationStats: () => any;
@@ -60,16 +67,22 @@ interface NotificationProviderProps {
 export const NotificationProvider: React.FC<NotificationProviderProps> = ({ children }) => {
   const [notifications, setNotifications] = useState<Notification[]>([]);
   const [isNotificationServiceReady, setIsNotificationServiceReady] = useState(false);
+  const [socketConnectionState, setSocketConnectionState] = useState<SocketConnectionState>(SocketConnectionState.DISCONNECTED);
   const [pushNotificationSettings, setPushNotificationSettings] = useState<NotificationSettings>({
     orderUpdates: true,
     walletTransactions: true,
     promotionalOffers: true,
     systemNotifications: true,
   });
+  
+  // Track recent notifications to prevent duplicates
+  const recentNotificationsRef = useRef<Map<string, number>>(new Map());
+  const DUPLICATE_PREVENTION_WINDOW = 10000; // 10 seconds
 
-  // Initialize push notification service
+  // Initialize push notification service and socket connection
   useEffect(() => {
     initializePushNotifications();
+    initializeSocketConnection();
   }, []);
 
   const initializePushNotifications = async () => {
@@ -99,6 +112,126 @@ export const NotificationProvider: React.FC<NotificationProviderProps> = ({ chil
     }
   };
 
+  const initializeSocketConnection = async () => {
+    try {
+      console.log('🔌 Initializing socket connection...');
+      
+      // Set up socket event listeners
+      const unsubscribeConnectionState = socketService.onConnectionStateChange((state) => {
+        console.log('🔌 Socket connection state changed:', state);
+        setSocketConnectionState(state);
+      });
+
+      const unsubscribeOrderUpdate = socketService.onOrderUpdate((data: OrderStatusUpdateData) => {
+        console.log('📦 Real-time order update received:', data);
+        handleRealTimeOrderUpdate(data);
+      });
+
+      const unsubscribeOrderCancellation = socketService.onOrderCancellation((data) => {
+        console.log('❌ Real-time order cancellation received:', data);
+        handleRealTimeOrderCancellation(data);
+      });
+
+      const unsubscribeNotification = socketService.onNotification((data) => {
+        console.log('🔔 Real-time notification received:', data);
+        handleRealTimeNotification(data);
+      });
+
+      const unsubscribeError = socketService.onError((error, code) => {
+        console.error('🔌 Socket error:', { error, code });
+        // Handle socket errors if needed
+      });
+
+      // Connect socket on app start
+      if (AppState.currentState === 'active') {
+        await socketService.connect();
+      }
+
+      console.log('🔌 Socket service initialized successfully');
+      
+      // Return cleanup function (though we don't use it in this context)
+      return () => {
+        unsubscribeConnectionState();
+        unsubscribeOrderUpdate();
+        unsubscribeOrderCancellation();
+        unsubscribeNotification();
+        unsubscribeError();
+      };
+      
+    } catch (error) {
+      console.error('🔌 Failed to initialize socket service:', error);
+    }
+  };
+
+  const handleRealTimeOrderUpdate = (data: OrderStatusUpdateData) => {
+    console.log('📺 Processing real-time order update:', data);
+    
+    // Check for duplicate socket notifications
+    const socketNotificationKey = `socket-order-${data.orderId}-${data.status}`;
+    const now = Date.now();
+    const lastSocketNotification = recentNotificationsRef.current.get(socketNotificationKey);
+    
+    if (lastSocketNotification && (now - lastSocketNotification) < DUPLICATE_PREVENTION_WINDOW) {
+      console.log('🔔 Skipping duplicate socket notification within', DUPLICATE_PREVENTION_WINDOW / 1000, 'seconds');
+      return;
+    }
+    
+    // Record this socket notification
+    recentNotificationsRef.current.set(socketNotificationKey, now);
+    
+    // Create in-app notification
+    const { title, message } = getStatusMessage(data.status as OrderStatus);
+    addNotification({
+      title,
+      message: `Order #${data.orderId}: ${data.message || message}`,
+      type: 'order_update',
+      orderId: data.orderId
+    });
+
+    // Always send push notification to device notification bar (not just when backgrounded)
+    if (isNotificationServiceReady && pushNotificationSettings.orderUpdates) {
+      console.log('🔔 Sending push notification from socket data...');
+      sendOrderNotificationFromSocketData(data);
+    }
+  };
+
+  const handleRealTimeOrderCancellation = (data: any) => {
+    console.log('❌ Processing real-time order cancellation:', data);
+    
+    addNotification({
+      title: 'Order Cancelled ❌',
+      message: `Order #${data.orderId} has been cancelled. ${data.reason}`,
+      type: 'order_update',
+      orderId: data.orderId
+    });
+  };
+
+  const handleRealTimeNotification = (data: any) => {
+    console.log('🔔 Processing real-time notification:', data);
+    
+    addNotification({
+      title: data.title,
+      message: data.message,
+      type: data.type || 'general',
+      orderId: data.orderId
+    });
+  };
+
+  const sendOrderNotificationFromSocketData = async (data: OrderStatusUpdateData) => {
+    if (!isNotificationServiceReady) return;
+    
+    try {
+      await sendOrderNotification({
+        orderId: data.orderId.toString(),
+        restaurantName: data.restaurantName || 'Restaurant',
+        orderStatus: data.status,
+        estimatedTime: data.estimatedTime || 'Calculating...'
+      });
+    } catch (error) {
+      console.error('Failed to send push notification from socket data:', error);
+    }
+  };
+
   const addNotification = (notification: Omit<Notification, 'id' | 'timestamp' | 'read'>) => {
     const newNotification: Notification = {
       ...notification,
@@ -109,10 +242,8 @@ export const NotificationProvider: React.FC<NotificationProviderProps> = ({ chil
 
     setNotifications(prev => [newNotification, ...prev]);
 
-    // Show alert for important order updates
-    if (notification.type === 'order_update') {
-      Alert.alert(notification.title, notification.message);
-    }
+    // Note: Visual display is handled by NotificationDisplay component
+    console.log('🔔 In-app notification added:', notification.title);
   };
 
   const markAsRead = (notificationId: string) => {
@@ -335,6 +466,26 @@ export const NotificationProvider: React.FC<NotificationProviderProps> = ({ chil
       return;
     }
 
+    // Check for duplicate notifications (prevent multiple notifications for same status change)
+    const notificationKey = `order-${order.id}-${order.status}`;
+    const now = Date.now();
+    const lastNotificationTime = recentNotificationsRef.current.get(notificationKey);
+    
+    if (lastNotificationTime && (now - lastNotificationTime) < DUPLICATE_PREVENTION_WINDOW) {
+      console.log('🔔 Skipping duplicate notification within', DUPLICATE_PREVENTION_WINDOW / 1000, 'seconds');
+      return;
+    }
+    
+    // Record this notification
+    recentNotificationsRef.current.set(notificationKey, now);
+    
+    // Clean up old entries to prevent memory leaks
+    for (const [key, time] of recentNotificationsRef.current.entries()) {
+      if (now - time > DUPLICATE_PREVENTION_WINDOW) {
+        recentNotificationsRef.current.delete(key);
+      }
+    }
+
     // Only notify for meaningful status changes
     const notifiableStatuses = [
       OrderStatus.ACCEPTED,
@@ -358,10 +509,10 @@ export const NotificationProvider: React.FC<NotificationProviderProps> = ({ chil
       });
       console.log('🔔 In-app notification added');
 
-      // Send push notification if service is ready
+      // Always try to send push notifications to device notification bar
       if (isNotificationServiceReady && pushNotificationSettings.orderUpdates) {
         try {
-          console.log('🔔 Sending push notification...');
+          console.log('🔔 Sending push notification to device notification bar...');
           await sendOrderNotification({
             orderId: order.id.toString(),
             restaurantName: order.restaurant?.name || 'Restaurant',
@@ -370,7 +521,7 @@ export const NotificationProvider: React.FC<NotificationProviderProps> = ({ chil
               new Date(Date.now() + order.estimatedDeliveryTime * 60000).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) :
               'Calculating...'
           });
-          console.log('🔔 Push notification sent successfully');
+          console.log('🔔 Push notification sent to device notification bar successfully');
         } catch (error) {
           console.error('🔔 Failed to send push notification for order status change:', error);
         }
@@ -400,9 +551,25 @@ export const NotificationProvider: React.FC<NotificationProviderProps> = ({ chil
     await handleOrderStatusChange(mockOrder, OrderStatus.PENDING);
   };
   
+  // Socket connection methods
+  const connectSocket = async () => {
+    try {
+      console.log('🔌 Connecting to socket...');
+      await socketService.connect();
+    } catch (error) {
+      console.error('🔌 Failed to connect socket:', error);
+    }
+  };
+
+  const disconnectSocket = () => {
+    console.log('🔌 Disconnecting socket...');
+    socketService.disconnect();
+  };
+
   const getNotificationStats = () => {
     return {
       notificationService: NotificationService.getNotificationStats(),
+      socketService: socketService.getDebugInfo(),
       inAppNotifications: {
         total: notifications.length,
         unread: unreadCount
@@ -432,6 +599,11 @@ export const NotificationProvider: React.FC<NotificationProviderProps> = ({ chil
     sendTestNotification,
     getPushToken,
     isNotificationServiceReady,
+    
+    // Real-time socket connection
+    socketConnectionState,
+    connectSocket,
+    disconnectSocket,
     
     // Debug functions
     testOrderStatusNotification,

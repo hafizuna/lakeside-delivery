@@ -2,6 +2,7 @@ import { Router } from 'express';
 import { authenticateToken } from '../middleware/auth';
 import { PrismaClient } from '@prisma/client';
 import escrowPaymentService from '../services/escrowPaymentService';
+import socketService from '../services/socketService';
 
 const router = Router();
 const prisma = new PrismaClient();
@@ -103,6 +104,29 @@ router.post('/:id/cancel', authenticateToken, async (req, res) => {
       return res.status(400).json(result);
     }
 
+    // Emit real-time order cancellation event
+    socketService.emitOrderCancellation(
+      orderId, 
+      order.customerId, 
+      cancelReason,
+      result.data?.refundAmount
+    );
+    
+    // Also emit order status update with CANCELLED status
+    const cancelledOrder = {
+      ...order,
+      status: 'CANCELLED',
+      restaurant: { name: 'Restaurant' } // Fallback name
+    };
+    socketService.emitOrderUpdate(cancelledOrder, `Order cancelled: ${cancelReason}`);
+    
+    console.log('📡 Socket events emitted for order cancellation:', {
+      orderId,
+      customerId: order.customerId,
+      reason: cancelReason,
+      refundAmount: result.data?.refundAmount
+    });
+
     res.json({
       success: true,
       data: result.data,
@@ -170,6 +194,7 @@ router.post('/:id/accept', authenticateToken, async (req, res) => {
       include: {
         restaurant: {
           select: {
+            id: true,
             name: true
           }
         },
@@ -180,6 +205,14 @@ router.post('/:id/accept', authenticateToken, async (req, res) => {
           }
         }
       }
+    });
+
+    // Emit real-time order status update for acceptance
+    socketService.emitOrderUpdate(acceptedOrder, 'Your order has been accepted by the restaurant!');
+    console.log('📡 Socket event emitted for order acceptance:', {
+      orderId: acceptedOrder.id,
+      customerId: acceptedOrder.customerId,
+      restaurantName: acceptedOrder.restaurant.name
     });
 
     res.json({

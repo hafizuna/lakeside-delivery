@@ -128,11 +128,6 @@ class EscrowPaymentServiceImpl {
             }
             // With NEW PRICING STRUCTURE: totalPrice already includes delivery fee
             const totalAmount = order.totalPrice.toNumber();
-            console.log('💳 ESCROW PAYMENT PROCESSING:', {
-                orderId: orderId,
-                totalAmount: totalAmount,
-                paymentMethod: order.paymentMethod
-            });
             // Process payment based on method
             if (order.paymentMethod === 'WALLET') {
                 // For wallet payments, deduct from customer wallet and hold in escrow
@@ -206,11 +201,6 @@ class EscrowPaymentServiceImpl {
             }
             // With NEW PRICING STRUCTURE: totalPrice already includes delivery fee
             const totalAmount = order.totalPrice.toNumber();
-            console.log('💰 CANCELLATION REFUND:', {
-                orderId: orderId,
-                totalAmount: totalAmount,
-                reason: reason
-            });
             // Process cancellation in transaction
             const result = await prisma.$transaction(async (tx) => {
                 // Update order status and reset financial fields
@@ -307,13 +297,6 @@ class EscrowPaymentServiceImpl {
             const restaurantEarning = itemsSubtotal - restaurantCommission;
             const driverEarning = order.driverEarning.toNumber();
             const platformEarnings = order.platformEarnings.toNumber();
-            console.log('💰 ESCROW RELEASE BREAKDOWN:', {
-                itemsSubtotal,
-                restaurantCommission,
-                restaurantEarning,
-                driverEarning,
-                platformEarnings
-            });
             // Release funds in transaction
             const result = await prisma.$transaction(async (tx) => {
                 // Update order status

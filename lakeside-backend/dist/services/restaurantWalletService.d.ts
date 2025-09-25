@@ -59,15 +59,15 @@ declare class RestaurantWalletServiceImpl implements RestaurantWalletService {
                 totalPayouts: Prisma.Decimal;
             };
             transaction: {
+                type: import(".prisma/client").$Enums.WalletTransactionType;
                 id: number;
                 status: import(".prisma/client").$Enums.WalletTransactionStatus;
                 createdAt: Date;
                 customerId: number | null;
                 driverId: number | null;
+                description: string | null;
                 adminId: number | null;
                 amount: Prisma.Decimal;
-                type: import(".prisma/client").$Enums.WalletTransactionType;
-                description: string | null;
                 screenshotUrl: string | null;
                 adminNotes: string | null;
                 processedAt: Date | null;
@@ -164,14 +164,14 @@ declare class RestaurantWalletServiceImpl implements RestaurantWalletService {
             } | undefined;
             transactions: {
                 amount: number;
+                type: import(".prisma/client").$Enums.WalletTransactionType;
                 id: number;
                 status: import(".prisma/client").$Enums.WalletTransactionStatus;
                 createdAt: Date;
                 customerId: number | null;
                 driverId: number | null;
-                adminId: number | null;
-                type: import(".prisma/client").$Enums.WalletTransactionType;
                 description: string | null;
+                adminId: number | null;
                 screenshotUrl: string | null;
                 adminNotes: string | null;
                 processedAt: Date | null;

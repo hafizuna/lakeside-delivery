@@ -1,7 +1,11 @@
 "use strict";
+var __importDefault = (this && this.__importDefault) || function (mod) {
+    return (mod && mod.__esModule) ? mod : { "default": mod };
+};
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.getRestaurantAnalytics = exports.getOrderDetails = exports.updateOrderStatus = exports.getRestaurantOrders = void 0;
 const client_1 = require("@prisma/client");
+const socketService_1 = __importDefault(require("../services/socketService"));
 const prisma = new client_1.PrismaClient();
 /**
  * Get Restaurant Orders
@@ -151,7 +155,20 @@ const updateOrderStatus = async (req, res) => {
                         phone: true,
                     },
                 },
+                restaurant: {
+                    select: {
+                        id: true,
+                        name: true,
+                    },
+                },
             },
+        });
+        // Emit real-time order status update
+        socketService_1.default.emitOrderUpdate(updatedOrder, `Order status updated to ${status}`);
+        console.log('📡 Socket event emitted for order status update:', {
+            orderId: updatedOrder.id,
+            newStatus: status,
+            customerId: updatedOrder.customerId
         });
         // Transform order to include calculated fields
         const transformedOrder = {

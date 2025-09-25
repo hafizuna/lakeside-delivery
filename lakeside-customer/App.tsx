@@ -10,6 +10,7 @@ import { NotificationProvider } from './src/shared/context/NotificationContext';
 import { ToastProvider } from './src/shared/context/ToastContext';
 import { LocationProvider } from './src/shared/context/LocationContext';
 import { AppNavigator } from './src/navigation/AppNavigator';
+import { NotificationDisplay } from './src/shared/components/NotificationDisplay';
 import { Colors } from './src/shared/theme';
 
 export default function App() {
@@ -22,6 +23,8 @@ export default function App() {
             <CartProvider>
               <NotificationProvider>
                 <AppNavigator />
+                {/* NotificationDisplay bridges NotificationContext and ToastContext */}
+                <NotificationDisplay />
               </NotificationProvider>
               <StatusBar style="dark" backgroundColor={Colors.background.primary} />
             </CartProvider>
