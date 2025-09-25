@@ -6,8 +6,19 @@ import {
   createMenuItem, 
   updateMenuItem, 
   deleteMenuItem, 
-  toggleMenuItemAvailability 
+  toggleMenuItemAvailability,
+  bulkUpdateAvailability,
+  bulkUpdateCategory,
+  bulkUpdatePrice,
+  bulkDeleteMenuItems
 } from '../controllers/menuController';
+import {
+  getCategories,
+  createCategory,
+  updateCategory,
+  deleteCategory,
+  reorderCategories
+} from '../controllers/categoryController';
 import {
   getRestaurantOrders,
   updateOrderStatus,
@@ -24,9 +35,24 @@ router.get('/auth/profile', authenticateToken, getRestaurantProfile);
 // Profile management
 router.put('/profile', authenticateToken, updateRestaurantProfile);
 
+// Category management routes
+router.get('/categories', authenticateToken, getCategories);
+router.post('/categories', authenticateToken, createCategory);
+router.put('/categories/:id', authenticateToken, updateCategory);
+router.delete('/categories/:id', authenticateToken, deleteCategory);
+router.patch('/categories/reorder', authenticateToken, reorderCategories);
+
 // Menu management routes
 router.get('/menu', authenticateToken, getMenuItems);
 router.post('/menu', authenticateToken, createMenuItem);
+
+// Bulk operations routes (must come before parameterized routes)
+router.patch('/menu/bulk/availability', authenticateToken, bulkUpdateAvailability);
+router.patch('/menu/bulk/category', authenticateToken, bulkUpdateCategory);
+router.patch('/menu/bulk/price', authenticateToken, bulkUpdatePrice);
+router.delete('/menu/bulk', authenticateToken, bulkDeleteMenuItems);
+
+// Individual menu item routes (parameterized routes come after bulk routes)
 router.put('/menu/:id', authenticateToken, updateMenuItem);
 router.delete('/menu/:id', authenticateToken, deleteMenuItem);
 router.patch('/menu/:id/availability', authenticateToken, toggleMenuItemAvailability);

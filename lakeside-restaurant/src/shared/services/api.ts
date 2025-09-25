@@ -9,7 +9,7 @@ const getApiBaseUrl = () => {
   } else {
     // For mobile devices, use your computer's IP address
     // You may need to update this IP if your network changes
-    return 'http://192.168.1.5:3001/api';
+    return 'http://192.168.1.4:3001/api';
   }
 };
 
@@ -203,6 +203,90 @@ class ApiService {
   async getAnalytics(period?: string): Promise<ApiResponse<any>> {
     const params = period ? `?period=${period}` : '';
     return this.request(`/restaurant/analytics${params}`);
+  }
+
+  // Category Management
+  async getCategories(): Promise<ApiResponse<any[]>> {
+    return this.request('/restaurant/categories');
+  }
+
+  async createCategory(categoryData: any): Promise<ApiResponse<any>> {
+    return this.request('/restaurant/categories', {
+      method: 'POST',
+      body: JSON.stringify(categoryData),
+    });
+  }
+
+  async updateCategory(id: number, categoryData: any): Promise<ApiResponse<any>> {
+    return this.request(`/restaurant/categories/${id}`, {
+      method: 'PUT',
+      body: JSON.stringify(categoryData),
+    });
+  }
+
+  async deleteCategory(id: number): Promise<ApiResponse<any>> {
+    return this.request(`/restaurant/categories/${id}`, {
+      method: 'DELETE',
+    });
+  }
+
+  async reorderCategories(categoryOrders: any[]): Promise<ApiResponse<any>> {
+    return this.request('/restaurant/categories/reorder', {
+      method: 'PATCH',
+      body: JSON.stringify({ categoryOrders }),
+    });
+  }
+
+  // Bulk Operations
+  async bulkUpdateAvailability(menuIds: number[], isAvailable: boolean): Promise<ApiResponse<any>> {
+    return this.request('/restaurant/menu/bulk/availability', {
+      method: 'PATCH',
+      body: JSON.stringify({ menuIds, isAvailable }),
+    });
+  }
+
+  async bulkUpdateCategory(menuIds: number[], categoryId: number | null): Promise<ApiResponse<any>> {
+    return this.request('/restaurant/menu/bulk/category', {
+      method: 'PATCH',
+      body: JSON.stringify({ menuIds, categoryId }),
+    });
+  }
+
+  async bulkUpdatePrice(menuIds: number[], type: 'percentage' | 'fixed', value: number): Promise<ApiResponse<any>> {
+    return this.request('/restaurant/menu/bulk/price', {
+      method: 'PATCH',
+      body: JSON.stringify({ menuIds, type, value }),
+    });
+  }
+
+  // Unified bulk operations methods for BulkOperationsScreen
+  async bulkUpdateMenuItems({ itemIds, updates }: { itemIds: number[]; updates: any }): Promise<ApiResponse<any>> {
+    // Handle different types of updates
+    if ('isAvailable' in updates) {
+      return this.request('/restaurant/menu/bulk/availability', {
+        method: 'PATCH',
+        body: JSON.stringify({ menuIds: itemIds, isAvailable: updates.isAvailable }),
+      });
+    } else if ('categoryId' in updates) {
+      return this.request('/restaurant/menu/bulk/category', {
+        method: 'PATCH',
+        body: JSON.stringify({ menuIds: itemIds, categoryId: updates.categoryId }),
+      });
+    } else if ('priceAdjustment' in updates) {
+      return this.request('/restaurant/menu/bulk/price', {
+        method: 'PATCH',
+        body: JSON.stringify({ menuIds: itemIds, type: 'fixed', value: updates.priceAdjustment }),
+      });
+    } else {
+      throw new Error('Unsupported bulk update operation');
+    }
+  }
+
+  async bulkDeleteMenuItems({ itemIds }: { itemIds: number[] }): Promise<ApiResponse<any>> {
+    return this.request('/restaurant/menu/bulk', {
+      method: 'DELETE',
+      body: JSON.stringify({ menuIds: itemIds }),
+    });
   }
 }
 

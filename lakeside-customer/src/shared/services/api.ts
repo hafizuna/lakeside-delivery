@@ -10,7 +10,7 @@ const getApiBaseUrl = () => {
   } else {
     // For mobile devices, use your computer's IP address
     // You may need to update this IP if your network changes
-    return 'http://192.168.1.5:3001/api';
+    return 'http://192.168.1.4:3001/api';
   }
 };
 
@@ -133,6 +133,15 @@ export interface Restaurant {
   menus?: MenuItem[];
 }
 
+// Category object structure (new format)
+export interface CategoryObject {
+  id: number;
+  name: string;
+  slug: string;
+  icon?: string;
+  sortOrder: number;
+}
+
 export interface MenuItem {
   id: number;
   restaurantId: number;
@@ -141,7 +150,9 @@ export interface MenuItem {
   price: string | number; // API returns string, but can handle both types
   imageUrl?: string;
   isAvailable: boolean;
-  category?: string; // Added from debug output
+  category?: string; // Legacy format for backward compatibility
+  categoryObject?: CategoryObject; // New format with full category object
+  categoryId?: number; // Category ID reference
 }
 
 // API Functions

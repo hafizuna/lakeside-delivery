@@ -7,6 +7,8 @@ import AddMenuItemScreen from '../features/menu/screens/AddMenuItemScreen';
 import EditMenuItemScreen from '../features/menu/screens/EditMenuItemScreen';
 import ProfileEditScreen from '../features/profile/screens/ProfileEditScreen';
 import RestaurantLocationScreen from '../features/profile/screens/RestaurantLocationScreen';
+import CategoryManagementScreen from '../features/menu/screens/CategoryManagementScreen';
+import { BulkOperationsScreen } from '../features/menu/screens/BulkOperationsScreen';
 
 interface MenuItem {
   id: number;
@@ -41,6 +43,8 @@ export type RootStackParamList = {
   EditMenuItem: { item: MenuItem };
   ProfileEdit: { restaurant?: RestaurantProfile };
   RestaurantLocation: undefined;
+  CategoryManagement: undefined;
+  BulkOperations: undefined;
 };
 
 const Stack = createStackNavigator<RootStackParamList>();
@@ -75,6 +79,14 @@ const AppNavigator: React.FC = () => {
           name="RestaurantLocation" 
           component={RestaurantLocationScreen}
           options={{ headerShown: true, title: 'Restaurant Location' }}
+        />
+        <Stack.Screen 
+          name="CategoryManagement" 
+          component={CategoryManagementScreen}
+        />
+        <Stack.Screen 
+          name="BulkOperations" 
+          component={BulkOperationsScreen}
         />
       </Stack.Navigator>
     </NavigationContainer>

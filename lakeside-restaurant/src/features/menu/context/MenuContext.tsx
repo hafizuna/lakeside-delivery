@@ -2,6 +2,14 @@ import React, { createContext, useContext, useState, useEffect, ReactNode } from
 import { apiService } from '../../../shared/services/api';
 import { useAuth } from '../../auth/context/AuthContext';
 
+interface Category {
+  id: number;
+  name: string;
+  slug: string;
+  icon?: string;
+  sortOrder: number;
+}
+
 interface MenuItem {
   id: number;
   restaurantId: number;
@@ -10,12 +18,14 @@ interface MenuItem {
   price: number;
   imageUrl?: string;
   isAvailable: boolean;
-  category: string;
+  categoryId?: number;
+  category?: Category;
 }
 
 interface MenuContextType {
   menuItems: MenuItem[];
   categories: string[];
+  categoryObjects: Category[];
   loading: boolean;
   refreshing: boolean;
   loadMenuItems: () => Promise<void>;
@@ -24,6 +34,11 @@ interface MenuContextType {
   updateMenuItem: (id: number, menuItem: Partial<MenuItem>) => Promise<boolean>;
   deleteMenuItem: (id: number) => Promise<boolean>;
   toggleAvailability: (id: number) => Promise<boolean>;
+  // Category management
+  loadCategories: () => Promise<void>;
+  createCategory: (categoryData: { name: string; icon?: string }) => Promise<boolean>;
+  updateCategory: (id: number, categoryData: { name?: string; icon?: string }) => Promise<boolean>;
+  deleteCategory: (id: number) => Promise<boolean>;
 }
 
 const MenuContext = createContext<MenuContextType | undefined>(undefined);
@@ -35,6 +50,7 @@ interface MenuProviderProps {
 export const MenuProvider: React.FC<MenuProviderProps> = ({ children }) => {
   const [menuItems, setMenuItems] = useState<MenuItem[]>([]);
   const [categories, setCategories] = useState<string[]>(['All']);
+  const [categoryObjects, setCategoryObjects] = useState<Category[]>([]);
   const [loading, setLoading] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
   const { isAuthenticated } = useAuth();
@@ -42,6 +58,7 @@ export const MenuProvider: React.FC<MenuProviderProps> = ({ children }) => {
   useEffect(() => {
     if (isAuthenticated) {
       loadMenuItems();
+      loadCategories();
     }
   }, [isAuthenticated]);
 
@@ -78,7 +95,12 @@ export const MenuProvider: React.FC<MenuProviderProps> = ({ children }) => {
   };
 
   const updateCategories = (items: MenuItem[]) => {
-    const uniqueCategories = ['All', ...new Set(items.map(item => item.category))];
+    // Extract unique category names for legacy string array (keeping for backward compatibility)
+    const uniqueCategories = ['All', ...new Set(
+      items
+        .map(item => item.category?.name || 'Uncategorized')
+        .filter(Boolean)
+    )];
     setCategories(uniqueCategories);
   };
 
@@ -159,9 +181,71 @@ export const MenuProvider: React.FC<MenuProviderProps> = ({ children }) => {
     }
   };
 
+  // Category management methods
+  const loadCategories = async (): Promise<void> => {
+    try {
+      // Don't set loading to true here to avoid conflicts with menu loading
+      const response = await apiService.getCategories();
+      
+      if (response.success && response.data) {
+        setCategoryObjects(response.data);
+      }
+    } catch (error) {
+      console.error('Error loading categories:', error);
+    }
+  };
+
+  const createCategory = async (categoryData: { name: string; icon?: string }): Promise<boolean> => {
+    try {
+      const response = await apiService.createCategory(categoryData);
+      
+      if (response.success && response.data) {
+        setCategoryObjects(prev => [...prev, response.data]);
+        return true;
+      }
+      return false;
+    } catch (error) {
+      console.error('Error creating category:', error);
+      return false;
+    }
+  };
+
+  const updateCategory = async (id: number, categoryData: { name?: string; icon?: string }): Promise<boolean> => {
+    try {
+      const response = await apiService.updateCategory(id, categoryData);
+      
+      if (response.success && response.data) {
+        setCategoryObjects(prev => 
+          prev.map(cat => cat.id === id ? response.data : cat)
+        );
+        return true;
+      }
+      return false;
+    } catch (error) {
+      console.error('Error updating category:', error);
+      return false;
+    }
+  };
+
+  const deleteCategory = async (id: number): Promise<boolean> => {
+    try {
+      const response = await apiService.deleteCategory(id);
+      
+      if (response.success) {
+        setCategoryObjects(prev => prev.filter(cat => cat.id !== id));
+        return true;
+      }
+      return false;
+    } catch (error) {
+      console.error('Error deleting category:', error);
+      return false;
+    }
+  };
+
   const value: MenuContextType = {
     menuItems,
     categories,
+    categoryObjects,
     loading,
     refreshing,
     loadMenuItems,
@@ -170,6 +254,10 @@ export const MenuProvider: React.FC<MenuProviderProps> = ({ children }) => {
     updateMenuItem,
     deleteMenuItem,
     toggleAvailability,
+    loadCategories,
+    createCategory,
+    updateCategory,
+    deleteCategory,
   };
 
   return (

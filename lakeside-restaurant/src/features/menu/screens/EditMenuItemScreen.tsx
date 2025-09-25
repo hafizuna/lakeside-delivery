@@ -19,6 +19,14 @@ import { Typography } from '../../../shared/theme/typography';
 import { RootStackParamList } from '../../../navigation/AppNavigator';
 import { useMenu } from '../context/MenuContext';
 
+interface Category {
+  id: number;
+  name: string;
+  slug: string;
+  icon?: string;
+  sortOrder: number;
+}
+
 interface MenuItem {
   id: number;
   restaurantId: number;
@@ -27,7 +35,8 @@ interface MenuItem {
   price: number;
   imageUrl?: string;
   isAvailable: boolean;
-  category: string;
+  categoryId?: number;
+  category?: Category;
 }
 
 interface MenuItemForm {
@@ -39,7 +48,7 @@ interface MenuItemForm {
   isAvailable: boolean;
 }
 
-const CATEGORIES = ['Pizza', 'Burgers', 'Salads', 'Pasta', 'Seafood', 'Desserts', 'Drinks'];
+// Categories are now loaded dynamically from the context
 
 type EditMenuItemScreenNavigationProp = StackNavigationProp<RootStackParamList>;
 type EditMenuItemScreenRouteProp = RouteProp<RootStackParamList, 'EditMenuItem'>;
@@ -47,7 +56,7 @@ type EditMenuItemScreenRouteProp = RouteProp<RootStackParamList, 'EditMenuItem'>
 const EditMenuItemScreen: React.FC = () => {
   const navigation = useNavigation<EditMenuItemScreenNavigationProp>();
   const route = useRoute<EditMenuItemScreenRouteProp>();
-  const { updateMenuItem, deleteMenuItem } = useMenu();
+  const { updateMenuItem, deleteMenuItem, categoryObjects } = useMenu();
   const item = route.params?.item;
   
   const [formData, setFormData] = useState<MenuItemForm>({
@@ -68,9 +77,9 @@ const EditMenuItemScreen: React.FC = () => {
       setFormData({
         itemName: item.itemName,
         description: item.description || '',
-        price: item.price.toString(),
+        price: (item.price || 0).toString(),
         imageUrl: item.imageUrl || '',
-        category: item.category,
+        category: item.category?.name || 'Pizza',
         isAvailable: item.isAvailable,
       });
     }
@@ -94,12 +103,16 @@ const EditMenuItemScreen: React.FC = () => {
 
     try {
       setSaving(true);
+      
+      // Find the categoryId from the selected category name
+      const selectedCategory = categoryObjects.find(cat => cat.name === formData.category);
+      
       const menuItemData = {
         itemName: formData.itemName.trim(),
         description: formData.description.trim(),
         price: parseFloat(formData.price),
         imageUrl: formData.imageUrl.trim(),
-        category: formData.category,
+        categoryId: selectedCategory?.id || null,
         isAvailable: formData.isAvailable,
       };
 
@@ -241,23 +254,23 @@ const EditMenuItemScreen: React.FC = () => {
             
             {showCategoryPicker && (
               <View style={styles.categoryPicker}>
-                {CATEGORIES.map((category) => (
+                {categoryObjects.map((categoryObj) => (
                   <TouchableOpacity
-                    key={category}
+                    key={categoryObj.id}
                     style={[
                       styles.categoryOption,
-                      formData.category === category && styles.selectedCategoryOption
+                      formData.category === categoryObj.name && styles.selectedCategoryOption
                     ]}
                     onPress={() => {
-                      setFormData(prev => ({ ...prev, category }));
+                      setFormData(prev => ({ ...prev, category: categoryObj.name }));
                       setShowCategoryPicker(false);
                     }}
                   >
                     <Text style={[
                       styles.categoryOptionText,
-                      formData.category === category && styles.selectedCategoryOptionText
+                      formData.category === categoryObj.name && styles.selectedCategoryOptionText
                     ]}>
-                      {category}
+                      {categoryObj.icon ? `${categoryObj.icon} ${categoryObj.name}` : categoryObj.name}
                     </Text>
                   </TouchableOpacity>
                 ))}

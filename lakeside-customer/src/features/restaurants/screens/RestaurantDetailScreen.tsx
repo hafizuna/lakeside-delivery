@@ -22,6 +22,7 @@ import { Restaurant, MenuItem, restaurantAPI } from '../../../shared/services/ap
 import { useCart } from '../../cart/context/CartContext';
 import { useToast } from '../../../shared/context/ToastContext';
 import { formatPrice, parsePrice, isValidPrice } from '../../../shared/utils/priceUtils';
+import { getCategoryName, getCategoryDisplayText } from '../../../shared/utils/categoryUtils';
 
 const { width } = Dimensions.get('window');
 
@@ -156,7 +157,10 @@ export const RestaurantDetailScreen: React.FC<RestaurantDetailScreenProps> = ({
               itemName: menu.itemName,
               price: menu.price,
               priceType: typeof menu.price,
-              isAvailable: menu.isAvailable
+              isAvailable: menu.isAvailable,
+              category: menu.category,
+              categoryObject: menu.categoryObject,
+              categoryDisplay: getCategoryDisplayText(menu)
             });
           });
         }

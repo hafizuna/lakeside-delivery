@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   View,
   Text,
@@ -28,24 +28,31 @@ interface MenuItemForm {
   isAvailable: boolean;
 }
 
-const CATEGORIES = ['Pizza', 'Burgers', 'Salads', 'Pasta', 'Seafood', 'Desserts', 'Drinks'];
+// Categories are now loaded dynamically from the context
 
 type AddMenuItemScreenNavigationProp = StackNavigationProp<RootStackParamList>;
 
 const AddMenuItemScreen: React.FC = () => {
   const navigation = useNavigation<AddMenuItemScreenNavigationProp>();
-  const { addMenuItem } = useMenu();
+  const { addMenuItem, categoryObjects } = useMenu();
   const [formData, setFormData] = useState<MenuItemForm>({
     itemName: '',
     description: '',
     price: '',
     imageUrl: '',
-    category: 'Pizza',
+    category: categoryObjects.length > 0 ? categoryObjects[0].name : 'General',
     isAvailable: true,
   });
 
   const [showCategoryPicker, setShowCategoryPicker] = useState(false);
   const [saving, setSaving] = useState(false);
+
+  // Update default category when categoryObjects are loaded
+  useEffect(() => {
+    if (categoryObjects.length > 0 && formData.category === 'General') {
+      setFormData(prev => ({ ...prev, category: categoryObjects[0].name }));
+    }
+  }, [categoryObjects]);
 
   const handleSave = async () => {
     if (!formData.itemName.trim()) {
@@ -60,12 +67,16 @@ const AddMenuItemScreen: React.FC = () => {
 
     try {
       setSaving(true);
+      
+      // Find the categoryId from the selected category name
+      const selectedCategory = categoryObjects.find(cat => cat.name === formData.category);
+      
       const menuItemData = {
         itemName: formData.itemName.trim(),
         description: formData.description.trim(),
         price: parseFloat(formData.price),
         imageUrl: formData.imageUrl.trim(),
-        category: formData.category,
+        categoryId: selectedCategory?.id || null,
         isAvailable: formData.isAvailable,
       };
 
@@ -170,23 +181,23 @@ const AddMenuItemScreen: React.FC = () => {
             
             {showCategoryPicker && (
               <View style={styles.categoryPicker}>
-                {CATEGORIES.map((category) => (
+                {categoryObjects.map((categoryObj) => (
                   <TouchableOpacity
-                    key={category}
+                    key={categoryObj.id}
                     style={[
                       styles.categoryOption,
-                      formData.category === category && styles.selectedCategoryOption
+                      formData.category === categoryObj.name && styles.selectedCategoryOption
                     ]}
                     onPress={() => {
-                      setFormData(prev => ({ ...prev, category }));
+                      setFormData(prev => ({ ...prev, category: categoryObj.name }));
                       setShowCategoryPicker(false);
                     }}
                   >
                     <Text style={[
                       styles.categoryOptionText,
-                      formData.category === category && styles.selectedCategoryOptionText
+                      formData.category === categoryObj.name && styles.selectedCategoryOptionText
                     ]}>
-                      {category}
+                      {categoryObj.icon ? `${categoryObj.icon} ${categoryObj.name}` : categoryObj.name}
                     </Text>
                   </TouchableOpacity>
                 ))}

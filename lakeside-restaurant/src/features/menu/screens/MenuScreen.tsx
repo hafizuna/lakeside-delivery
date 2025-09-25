@@ -12,11 +12,19 @@ import {
 } from 'react-native';
 import { useNavigation } from '@react-navigation/native';
 import { StackNavigationProp } from '@react-navigation/stack';
-import { SettingsIcon, EditIcon, PlusIcon } from '../../../shared/components/CustomIcons';
+import { SettingsIcon, EditIcon, PlusIcon, BulkOperationsIcon, CategoryManagementIcon } from '../../../shared/components/CustomIcons';
 import { Colors } from '../../../shared/theme/colors';
 import { Typography } from '../../../shared/theme/typography';
 import { RootStackParamList } from '../../../navigation/AppNavigator';
 import { useMenu } from '../context/MenuContext';
+
+interface Category {
+  id: number;
+  name: string;
+  slug: string;
+  icon?: string;
+  sortOrder: number;
+}
 
 interface MenuItem {
   id: number;
@@ -26,7 +34,8 @@ interface MenuItem {
   price: number;
   imageUrl?: string;
   isAvailable: boolean;
-  category: string;
+  categoryId?: number;
+  category?: Category;
 }
 
 type MenuScreenNavigationProp = StackNavigationProp<RootStackParamList>;
@@ -36,6 +45,7 @@ const MenuScreen: React.FC = () => {
   const { 
     menuItems, 
     categories, 
+    categoryObjects,
     loading, 
     refreshing, 
     refreshMenuItems, 
@@ -81,7 +91,8 @@ const MenuScreen: React.FC = () => {
   // Filter menu items by selected category
   const filteredMenuItems = selectedCategory === 'All' 
     ? menuItems 
-    : menuItems.filter(item => item.category === selectedCategory);
+    : menuItems.filter(item => item.category?.name === selectedCategory || 
+        (selectedCategory === 'Uncategorized' && (!item.category || !item.category.name)));
 
   const renderMenuItem = ({ item }: { item: MenuItem }) => (
     <TouchableOpacity 
@@ -98,7 +109,7 @@ const MenuScreen: React.FC = () => {
           <View style={styles.itemTitleContainer}>
             <Text style={styles.itemName}>{item.itemName}</Text>
             <View style={styles.categoryBadge}>
-              <Text style={styles.categoryText}>{item.category}</Text>
+              <Text style={styles.categoryText}>{item.category?.name || 'Uncategorized'}</Text>
             </View>
           </View>
           <TouchableOpacity 
@@ -115,7 +126,7 @@ const MenuScreen: React.FC = () => {
         <Text style={styles.itemDescription}>{item.description}</Text>
         
         <View style={styles.itemFooter}>
-          <Text style={styles.itemPrice}>${Number(item.price).toFixed(2)}</Text>
+          <Text style={styles.itemPrice}>${Number(item.price || 0).toFixed(2)}</Text>
           <TouchableOpacity
             style={[
               styles.availabilityToggle,
@@ -142,9 +153,22 @@ const MenuScreen: React.FC = () => {
     <View style={styles.container}>
       <View style={styles.header}>
         <Text style={styles.title}>Menu</Text>
-        <TouchableOpacity style={styles.settingsButton}>
-          <SettingsIcon size={24} color={Colors.text.primary} />
-        </TouchableOpacity>
+        <View style={styles.headerActions}>
+          <TouchableOpacity 
+            style={styles.actionButton}
+            onPress={() => navigation.navigate('BulkOperations')}
+          >
+            <BulkOperationsIcon size={20} color={Colors.text.inverse} />
+            <Text style={styles.actionButtonText}>Bulk Actions</Text>
+          </TouchableOpacity>
+          <TouchableOpacity 
+            style={styles.categoryButton}
+            onPress={() => navigation.navigate('CategoryManagement')}
+          >
+            <CategoryManagementIcon size={20} color={Colors.text.inverse} />
+            <Text style={styles.categoryButtonText}>Categories</Text>
+          </TouchableOpacity>
+        </View>
       </View>
 
       <View style={styles.categoriesContainer}>
@@ -153,20 +177,35 @@ const MenuScreen: React.FC = () => {
           showsHorizontalScrollIndicator={false}
           contentContainerStyle={styles.categoriesScrollContent}
         >
-          {categories.map((category) => (
+          <TouchableOpacity
+            key="All"
+            style={[
+              styles.categoryFilterButton,
+              selectedCategory === 'All' && styles.activeCategoryFilterButton
+            ]}
+            onPress={() => setSelectedCategory('All')}
+          >
+            <Text style={[
+              styles.categoryFilterButtonText,
+              selectedCategory === 'All' && styles.activeCategoryFilterButtonText
+            ]}>
+              All
+            </Text>
+          </TouchableOpacity>
+          {categoryObjects.map((categoryObj) => (
             <TouchableOpacity
-              key={category}
+              key={categoryObj.id}
               style={[
-                styles.categoryButton,
-                selectedCategory === category && styles.activeCategoryButton
+                styles.categoryFilterButton,
+                selectedCategory === categoryObj.name && styles.activeCategoryFilterButton
               ]}
-              onPress={() => setSelectedCategory(category)}
+              onPress={() => setSelectedCategory(categoryObj.name)}
             >
               <Text style={[
-                styles.categoryButtonText,
-                selectedCategory === category && styles.activeCategoryButtonText
+                styles.categoryFilterButtonText,
+                selectedCategory === categoryObj.name && styles.activeCategoryFilterButtonText
               ]}>
-                {category}
+                {categoryObj.icon ? `${categoryObj.icon} ${categoryObj.name}` : categoryObj.name}
               </Text>
             </TouchableOpacity>
           ))}
@@ -210,8 +249,48 @@ const styles = StyleSheet.create({
     fontWeight: Typography.fontWeight.bold,
     color: Colors.text.primary,
   },
-  settingsButton: {
-    padding: 8,
+  headerActions: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  actionButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: Colors.primary.main,
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    borderRadius: 16,
+    marginRight: 8,
+    shadowColor: Colors.shadow.light,
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 4,
+    elevation: 2,
+  },
+  actionButtonText: {
+    marginLeft: 6,
+    color: Colors.text.inverse,
+    fontSize: Typography.fontSize.sm,
+    fontWeight: Typography.fontWeight.semiBold,
+  },
+  categoryButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: Colors.secondary.main,
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    borderRadius: 16,
+    shadowColor: Colors.shadow.light,
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 4,
+    elevation: 2,
+  },
+  categoryButtonText: {
+    marginLeft: 6,
+    color: Colors.text.inverse,
+    fontSize: Typography.fontSize.sm,
+    fontWeight: Typography.fontWeight.semiBold,
   },
   categoriesContainer: {
     marginBottom: 20,
@@ -219,7 +298,7 @@ const styles = StyleSheet.create({
   categoriesScrollContent: {
     paddingHorizontal: 4,
   },
-  categoryButton: {
+  categoryFilterButton: {
     paddingHorizontal: 16,
     paddingVertical: 8,
     marginRight: 12,
@@ -228,16 +307,16 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: Colors.border.light,
   },
-  activeCategoryButton: {
+  activeCategoryFilterButton: {
     backgroundColor: Colors.primary.main,
     borderColor: Colors.primary.main,
   },
-  categoryButtonText: {
+  categoryFilterButtonText: {
     fontSize: Typography.fontSize.sm,
     fontWeight: Typography.fontWeight.medium,
     color: Colors.text.secondary,
   },
-  activeCategoryButtonText: {
+  activeCategoryFilterButtonText: {
     color: Colors.text.inverse,
     fontWeight: Typography.fontWeight.semiBold,
   },

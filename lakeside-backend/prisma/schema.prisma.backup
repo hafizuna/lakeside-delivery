@@ -1,0 +1,522 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "mysql"
+  url      = env("DATABASE_URL")
+}
+
+// Users table - Core user management
+model User {
+  id          Int      @id @default(autoincrement()) @map("user_id")
+  name        String
+  phone       String   @unique
+  passwordHash String  @map("password_hash")
+  role        UserRole @default(CUSTOMER)
+  status      UserStatus @default(ACTIVE)
+  createdAt   DateTime @default(now()) @map("created_at")
+  
+  // Relations
+  driverProfile           Driver?
+  restaurantProfile       Restaurant?
+  customerOrders          Order[] @relation("CustomerOrders")
+  driverOrders            Order[] @relation("DriverOrders")
+  loyalty                 Loyalty?
+  customerWallet          CustomerWallet?
+  auditLogs               AuditLog[]
+  customerWalletTransactions WalletTransaction[] @relation("CustomerWalletTransactions")
+  adminWalletActions         WalletTransaction[] @relation("AdminWalletActions")
+  ratings                    Rating[]
+  
+  @@map("users")
+}
+
+// Driver profile
+model Driver {
+  id            Int     @id @map("driver_id")
+  vehicleType   VehicleType @default(BIKE) @map("vehicle_type")
+  currentLat    Decimal?     @map("current_lat") @db.Decimal(10, 6)
+  currentLng    Decimal?     @map("current_lng") @db.Decimal(10, 6)
+  isAvailable   Boolean      @default(true) @map("is_available")
+  walletBalance Decimal      @default(0) @map("wallet_balance") @db.Decimal(10, 2)
+  rating        Float?       @default(5.0)
+  
+  // Driver Registration & Documents
+  licenseNumber     String    @map("license_number")
+  vehicleRegistration String  @map("vehicle_registration")
+  documentUrls      Json?     @map("document_urls") // {license: url, registration: url, photo: url}
+  approvalStatus    DriverApprovalStatus @default(PENDING) @map("approval_status")
+  
+  // Driver Performance & Status
+  onlineAt          DateTime? @map("online_at")
+  totalDeliveries   Int       @default(0) @map("total_deliveries")
+  completionRate    Float?    @default(100.0) @map("completion_rate")
+  lastDeliveryAt    DateTime? @map("last_delivery_at")
+  
+  user User @relation(fields: [id], references: [id], onDelete: Cascade)
+  
+  // Relations
+  driverWallet      DriverWallet?
+  orderTracking     OrderTracking[]
+  walletTransactions WalletTransaction[]
+  supportTickets    SupportTicket[]
+  ratings           Rating[] @relation("DriverRatings")
+  
+  @@map("drivers")
+}
+
+// Restaurant profile
+model Restaurant {
+  id             Int     @id @map("restaurant_id")
+  name           String
+  address        String
+  lat            Decimal @db.Decimal(10, 6)
+  lng            Decimal @db.Decimal(10, 6)
+  logoUrl        String? @map("logo_url")
+  bannerUrl      String? @map("banner_url")
+  rating         Float?  @default(0.0)
+  totalOrders    Int     @default(0) @map("total_orders")
+  description    String?
+  geofenceZoneId Int?    @map("geofence_zone_id")
+  commissionRate Decimal @default(15.0) @map("commission_rate") @db.Decimal(5, 2)
+  status         RestaurantStatus @default(OPEN)
+  
+  user User @relation(fields: [id], references: [id], onDelete: Cascade)
+  geofenceZone GeofenceZone? @relation(fields: [geofenceZoneId], references: [id])
+  
+  // Relations
+  menus          Menu[]
+  orders         Order[]
+  supportTickets SupportTicket[]
+  ratings        Rating[] @relation("RestaurantRatings")
+  restaurantWallet RestaurantWallet?
+  
+  @@map("restaurants")
+}
+
+// Menu items
+model Menu {
+  id           Int     @id @default(autoincrement()) @map("menu_id")
+  restaurantId Int     @map("restaurant_id")
+  itemName     String  @map("item_name")
+  description  String?
+  price        Decimal @db.Decimal(10, 2)
+  imageUrl     String? @map("image_url")
+  isAvailable  Boolean @default(true) @map("is_available")
+  category     String  @default("Other")
+
+  restaurant Restaurant @relation(fields: [restaurantId], references: [id], onDelete: Cascade)
+  orderItems OrderItem[]
+  
+  @@map("menus")
+}
+
+// Orders
+model Order {
+  id           Int         @id @default(autoincrement()) @map("order_id")
+  customerId   Int         @map("customer_id")
+  restaurantId Int         @map("restaurant_id")
+  driverId     Int?        @map("driver_id")
+  
+  // NEW PRICING STRUCTURE
+  itemsSubtotal    Decimal     @default(0.00) @map("items_subtotal") @db.Decimal(10, 2)    // Food items price only
+  deliveryFee      Decimal     @map("delivery_fee") @db.Decimal(10, 2)                      // Delivery cost
+  totalPrice       Decimal     @map("total_price") @db.Decimal(10, 2)                       // itemsSubtotal + deliveryFee
+  
+  // COMMISSION STRUCTURE
+  restaurantCommission Decimal  @map("restaurant_commission") @db.Decimal(10, 2)              // Restaurant commission (15%)
+  deliveryCommission   Decimal  @default(0.00) @map("delivery_commission") @db.Decimal(10, 2) // 10% of deliveryFee
+  platformEarnings     Decimal  @default(0.00) @map("platform_earnings") @db.Decimal(10, 2)   // restaurantCommission + deliveryCommission
+  
+  status       OrderStatus @default(PENDING)
+  orderRating  Float?      @default(0.0) @map("order_rating")
+  
+  // Restaurant Pickup Information (CRITICAL - Driver needs this!)
+  pickupAddress        String?  @map("pickup_address")
+  pickupLat            Decimal? @map("pickup_lat") @db.Decimal(10, 6)
+  pickupLng            Decimal? @map("pickup_lng") @db.Decimal(10, 6)
+  pickupInstructions   String?  @map("pickup_instructions")
+  estimatedPickupTime  DateTime? @map("estimated_pickup_time")
+  
+  // Delivery Address Information
+  deliveryAddress      String   @map("delivery_address")
+  deliveryLat          Decimal? @map("delivery_lat") @db.Decimal(10, 6)
+  deliveryLng          Decimal? @map("delivery_lng") @db.Decimal(10, 6)
+  deliveryInstructions String?  @map("delivery_instructions")
+  
+  // Driver Earnings & Distance (CRITICAL - Driver needs earnings info!)
+  driverEarning        Decimal  @default(0.00) @map("driver_earning") @db.Decimal(10, 2)
+  deliveryDistance     Decimal? @map("delivery_distance") @db.Decimal(8, 2) // km
+  estimatedDeliveryTime Int?    @map("estimated_delivery_time") // minutes
+  
+  // Payment Information
+  paymentMethod PaymentMethod @default(CASH) @map("payment_method")
+  paymentStatus PaymentStatus @default(PENDING) @map("payment_status")
+  
+  // Order Lifecycle Timestamps
+  createdAt         DateTime  @default(now()) @map("created_at")
+  updatedAt         DateTime  @updatedAt @map("updated_at")
+  acceptedAt        DateTime? @map("accepted_at")
+  preparingAt       DateTime? @map("preparing_at")
+  pickedUpAt        DateTime? @map("picked_up_at")
+  deliveredAt       DateTime? @map("delivered_at")
+  
+  customer   User       @relation("CustomerOrders", fields: [customerId], references: [id])
+  restaurant Restaurant @relation(fields: [restaurantId], references: [id])
+  driver     User?      @relation("DriverOrders", fields: [driverId], references: [id])
+  
+  // Relations
+  orderItems    OrderItem[]
+  orderTracking OrderTracking[]
+  supportTickets SupportTicket[]
+  ratings        Rating[] @relation("OrderRatings")
+  
+  @@map("orders")
+}
+
+// Order items (junction table for orders and menu items)
+model OrderItem {
+  id       Int @id @default(autoincrement())
+  orderId  Int @map("order_id")
+  menuId   Int @map("menu_id")
+  quantity Int @default(1)
+  price    Decimal @db.Decimal(10, 2)
+  
+  order Order @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  menu  Menu  @relation(fields: [menuId], references: [id])
+  
+  @@map("order_items")
+}
+
+// Order tracking
+model OrderTracking {
+  id        Int      @id @default(autoincrement()) @map("tracking_id")
+  orderId   Int      @map("order_id")
+  driverId  Int      @map("driver_id")
+  lat       Decimal  @db.Decimal(10, 6)
+  lng       Decimal  @db.Decimal(10, 6)
+  timestamp DateTime @default(now())
+  
+  order  Order  @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  driver Driver @relation(fields: [driverId], references: [id])
+  
+  @@map("order_tracking")
+}
+
+// Customer Wallet - For food order payments
+model CustomerWallet {
+  customerId    Int      @id @map("customer_id")
+  balance       Decimal  @default(0.00) @map("balance") @db.Decimal(10, 2)
+  isActive      Boolean  @default(true) @map("is_active")
+  totalTopUps   Decimal  @default(0.00) @map("total_topups") @db.Decimal(10, 2)
+  totalSpent    Decimal  @default(0.00) @map("total_spent") @db.Decimal(10, 2)
+  lastTopUpAt   DateTime? @map("last_topup_at")
+  createdAt     DateTime @default(now()) @map("created_at")
+  updatedAt     DateTime @updatedAt @map("updated_at")
+  
+  customer User @relation(fields: [customerId], references: [id], onDelete: Cascade)
+  
+  @@map("customer_wallets")
+}
+
+// Restaurant Wallet - For commission earnings and payouts
+model RestaurantWallet {
+  restaurantId         Int      @id @map("restaurant_id")
+  balance              Decimal  @default(0.00) @map("balance") @db.Decimal(10, 2)
+  totalEarnings        Decimal  @default(0.00) @map("total_earnings") @db.Decimal(10, 2)
+  totalCommissionPaid  Decimal  @default(0.00) @map("total_commission_paid") @db.Decimal(10, 2)
+  totalPayouts         Decimal  @default(0.00) @map("total_payouts") @db.Decimal(10, 2)
+  isActive             Boolean  @default(true) @map("is_active")
+  lastEarningAt        DateTime? @map("last_earning_at")
+  createdAt            DateTime @default(now()) @map("created_at")
+  updatedAt            DateTime @updatedAt @map("updated_at")
+  
+  restaurant Restaurant @relation(fields: [restaurantId], references: [id], onDelete: Cascade)
+  
+  @@map("restaurant_wallets")
+}
+
+// Driver Wallet - For delivery earnings and collateral
+model DriverWallet {
+  driverId         Int      @id @map("driver_id")
+  balance          Decimal  @default(0.00) @map("balance") @db.Decimal(10, 2)
+  collateralAmount Decimal  @default(0.00) @map("collateral_amount") @db.Decimal(10, 2)
+  minCollateral    Decimal  @default(1000.00) @map("min_collateral") @db.Decimal(10, 2)
+  totalEarnings    Decimal  @default(0.00) @map("total_earnings") @db.Decimal(10, 2)
+  totalWithdrawn   Decimal  @default(0.00) @map("total_withdrawn") @db.Decimal(10, 2)
+  canWithdraw      Boolean  @default(false) @map("can_withdraw")
+  isActive         Boolean  @default(true) @map("is_active")
+  lastEarningAt    DateTime? @map("last_earning_at")
+  createdAt        DateTime @default(now()) @map("created_at")
+  updatedAt        DateTime @updatedAt @map("updated_at")
+  
+  driver Driver @relation(fields: [driverId], references: [id], onDelete: Cascade)
+  
+  @@map("driver_wallets")
+}
+
+model WalletTransaction {
+  id              Int                     @id @default(autoincrement()) @map("transaction_id")
+  
+  // User Reference (Either customer OR driver)
+  customerId      Int?                    @map("customer_id")
+  driverId        Int?                    @map("driver_id")
+  
+  // Transaction Details
+  amount          Decimal                 @db.Decimal(10, 2)
+  type            WalletTransactionType
+  status          WalletTransactionStatus @default(PENDING)
+  description     String?                 // Transaction description
+  
+  // Screenshot & Approval (For top-ups)
+  screenshotUrl   String?                 @map("screenshot_url")
+  adminId         Int?                    @map("admin_id")
+  adminNotes      String?                 @map("admin_notes")
+  
+  // Timestamps
+  createdAt       DateTime                @default(now()) @map("created_at")
+  processedAt     DateTime?               @map("processed_at")
+  
+  // Relations
+  customer        User?                   @relation("CustomerWalletTransactions", fields: [customerId], references: [id])
+  driver          Driver?                 @relation(fields: [driverId], references: [id], onDelete: Cascade)
+  admin           User?                   @relation("AdminWalletActions", fields: [adminId], references: [id])
+  
+  @@map("wallet_transactions")
+}
+
+// Customer loyalty
+model Loyalty {
+  customerId     Int      @id @map("customer_id")
+  totalOrders    Int      @default(0) @map("total_orders")
+  loyaltyPoints  Int      @default(0) @map("loyalty_points")
+  lastRewardedAt DateTime? @map("last_rewarded_at")
+  
+  customer User @relation(fields: [customerId], references: [id], onDelete: Cascade)
+  
+  @@map("loyalty")
+}
+
+// Geofencing zones
+model GeofenceZone {
+  id                  Int               @id @default(autoincrement()) @map("zone_id")
+  name                String
+  polygonCoordinates  Json              @map("polygon_coordinates")
+  status              GeofenceStatus    @default(ACTIVE)
+  
+  restaurants         Restaurant[]
+  deliveryFeeRules    DeliveryFeeRule[]
+  
+  @@map("geofencing")
+}
+
+// Delivery fee rules
+model DeliveryFeeRule {
+  id         Int                 @id @default(autoincrement()) @map("rule_id")
+  ruleType   DeliveryFeeRuleType @map("rule_type")
+  baseFee    Decimal             @map("base_fee") @db.Decimal(10, 2)
+  perKmRate  Decimal?            @map("per_km_rate") @db.Decimal(10, 2)
+  minFee     Decimal             @map("min_fee") @db.Decimal(10, 2)
+  maxFee     Decimal             @map("max_fee") @db.Decimal(10, 2)
+  zoneId     Int?                @map("zone_id")
+  active     Boolean             @default(true)
+  createdAt  DateTime            @default(now()) @map("created_at")
+  updatedAt  DateTime            @updatedAt @map("updated_at")
+  
+  zone GeofenceZone? @relation(fields: [zoneId], references: [id])
+  
+  @@map("delivery_fee_rules")
+}
+
+// Audit logs
+model AuditLog {
+  id               Int        @id @default(autoincrement()) @map("log_id")
+  adminId          Int        @map("admin_id")
+  action           String
+  targetEntityId   Int        @map("target_entity_id")
+  entityType       EntityType @map("entity_type")
+  details          Json
+  timestamp        DateTime   @default(now())
+  
+  admin User @relation(fields: [adminId], references: [id])
+  
+  @@map("audit_logs")
+}
+
+// Support tickets
+model SupportTicket {
+  id           Int               @id @default(autoincrement()) @map("ticket_id")
+  orderId      Int               @map("order_id")
+  customerId   Int               @map("customer_id")
+  driverId     Int?              @map("driver_id")
+  restaurantId Int?              @map("restaurant_id")
+  issueType    SupportIssueType  @map("issue_type")
+  status       SupportTicketStatus @default(OPEN)
+  notes        String?
+  createdAt    DateTime          @default(now()) @map("created_at")
+  resolvedAt   DateTime?         @map("resolved_at")
+  
+  order      Order       @relation(fields: [orderId], references: [id])
+  driver     Driver?     @relation(fields: [driverId], references: [id])
+  restaurant Restaurant? @relation(fields: [restaurantId], references: [id])
+  
+  @@map("support_tickets")
+}
+
+// Rating system
+model Rating {
+  id           Int        @id @default(autoincrement()) @map("rating_id")
+  customerId   Int        @map("customer_id")
+  ratingType   RatingType @map("rating_type")
+  
+  // Target entity (restaurant, order, or driver)
+  restaurantId Int?       @map("restaurant_id")
+  orderId      Int?       @map("order_id")
+  driverId     Int?       @map("driver_id")
+  
+  // Rating details
+  rating       Int        // 1-5 stars
+  comment      String?    @db.Text
+  
+  // Timestamps
+  createdAt    DateTime   @default(now()) @map("created_at")
+  updatedAt    DateTime   @updatedAt @map("updated_at")
+  
+  // Relations
+  customer     User        @relation(fields: [customerId], references: [id], onDelete: Cascade)
+  restaurant   Restaurant? @relation("RestaurantRatings", fields: [restaurantId], references: [id], onDelete: Cascade)
+  order        Order?      @relation("OrderRatings", fields: [orderId], references: [id], onDelete: Cascade)
+  driver       Driver?     @relation("DriverRatings", fields: [driverId], references: [id], onDelete: Cascade)
+  
+  // Constraints
+  @@unique([customerId, restaurantId], name: "unique_customer_restaurant_rating")
+  @@unique([customerId, orderId], name: "unique_customer_order_rating")
+  @@unique([customerId, driverId], name: "unique_customer_driver_rating")
+  @@map("ratings")
+}
+
+// Enums
+enum UserRole {
+  CUSTOMER
+  DRIVER
+  RESTAURANT
+  ADMIN
+}
+
+enum UserStatus {
+  ACTIVE
+  BLOCKED
+  PENDING
+}
+
+enum VehicleType {
+  BIKE
+}
+
+enum DriverApprovalStatus {
+  PENDING
+  APPROVED
+  REJECTED
+  SUSPENDED
+}
+
+enum RestaurantStatus {
+  OPEN
+  CLOSED
+  SUSPENDED
+}
+
+enum OrderStatus {
+  PENDING
+  ACCEPTED
+  PREPARING
+  READY
+  PICKED_UP
+  DELIVERING
+  DELIVERED
+  CANCELLED
+}
+
+enum PaymentMethod {
+  CASH
+  CARD
+  WALLET
+  UPI
+}
+
+enum PaymentStatus {
+  PENDING
+  ESCROWED
+  PAID
+  FAILED
+  REFUNDED
+}
+
+enum WalletTransactionType {
+  // Customer Transactions
+  CUSTOMER_TOPUP
+  CUSTOMER_ORDER_PAYMENT
+  CUSTOMER_REFUND
+  
+  // Driver Transactions
+  DRIVER_COLLATERAL_DEPOSIT
+  DRIVER_EARNING
+  DRIVER_WITHDRAWAL
+  DRIVER_PENALTY
+  
+  // Restaurant Transactions
+  RESTAURANT_ORDER_EARNING
+  RESTAURANT_COMMISSION_DEDUCTION
+  RESTAURANT_PAYOUT
+  
+  // General Transactions
+  CREDIT
+  DEBIT
+  TOPUP
+  COMMISSION
+}
+
+enum WalletTransactionStatus {
+  PENDING
+  APPROVED
+  REJECTED
+}
+
+enum GeofenceStatus {
+  ACTIVE
+  INACTIVE
+}
+
+enum DeliveryFeeRuleType {
+  FLAT
+  DISTANCE
+  ZONE
+  HYBRID
+}
+
+enum EntityType {
+  DRIVER
+  RESTAURANT
+  ORDER
+  WALLET
+}
+
+enum SupportIssueType {
+  FOOD
+  DELIVERY
+  PAYMENT
+  OTHER
+}
+
+enum SupportTicketStatus {
+  OPEN
+  RESOLVED
+  CLOSED
+}
+
+enum RatingType {
+  RESTAURANT
+  ORDER
+  DRIVER
+}

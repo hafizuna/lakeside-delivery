@@ -20,4 +20,24 @@ export declare const deleteMenuItem: (req: AuthenticatedRequest, res: Response) 
  * Toggle Menu Item Availability
  */
 export declare const toggleMenuItemAvailability: (req: AuthenticatedRequest, res: Response) => Promise<Response<any, Record<string, any>> | undefined>;
+/**
+ * Bulk Update Menu Item Availability
+ * PATCH /restaurant/menu/bulk/availability
+ */
+export declare const bulkUpdateAvailability: (req: AuthenticatedRequest, res: Response) => Promise<Response<any, Record<string, any>> | undefined>;
+/**
+ * Bulk Update Menu Item Category
+ * PATCH /restaurant/menu/bulk/category
+ */
+export declare const bulkUpdateCategory: (req: AuthenticatedRequest, res: Response) => Promise<Response<any, Record<string, any>> | undefined>;
+/**
+ * Bulk Update Menu Item Prices
+ * PATCH /restaurant/menu/bulk/price
+ */
+export declare const bulkUpdatePrice: (req: AuthenticatedRequest, res: Response) => Promise<Response<any, Record<string, any>> | undefined>;
+/**
+ * Bulk Delete Menu Items
+ * DELETE /restaurant/menu/bulk
+ */
+export declare const bulkDeleteMenuItems: (req: AuthenticatedRequest, res: Response) => Promise<Response<any, Record<string, any>> | undefined>;
 //# sourceMappingURL=menuController.d.ts.map

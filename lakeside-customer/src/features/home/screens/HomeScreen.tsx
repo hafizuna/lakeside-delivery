@@ -40,18 +40,26 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({ onRestaurantPress, onCar
       setLoading(true);
       console.log('Loading restaurants...');
       
-      // Set static categories immediately
-      const staticCategories = [
-        'Burgers',
-        'Pizza', 
-        'Cookies',
-        'Chicken',
-        'Seafood',
-        'Vegetarian',
-        'Desserts',
-        'Beverages'
-      ];
-      setCategories(staticCategories);
+      // Load categories from API with fallback to static ones
+      try {
+        console.log('Loading categories...');
+        const categoriesResponse = await restaurantAPI.getCategories();
+        
+        if (categoriesResponse.success && categoriesResponse.data) {
+          console.log('Categories loaded from API:', categoriesResponse.data);
+          setCategories(categoriesResponse.data);
+        } else {
+          throw new Error('Categories API failed');
+        }
+      } catch (error) {
+        console.log('Failed to load categories from API, using fallback:', error);
+        // Fallback to static categories if API fails
+        const fallbackCategories = [
+          'Burgers', 'Pizza', 'Cookies', 'Chicken',
+          'Seafood', 'Vegetarian', 'Desserts', 'Beverages'
+        ];
+        setCategories(fallbackCategories);
+      }
       
       // Load restaurants from API
       const restaurantsResponse = await restaurantAPI.getRestaurants();

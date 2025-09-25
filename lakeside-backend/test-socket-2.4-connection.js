@@ -11,7 +11,7 @@ const io = require('socket.io-client');
 // Test both localhost and network IP
 const TEST_URLS = [
   'http://localhost:3001',
-  'http://192.168.1.5:3001'
+  'http://192.168.1.4:3001'
 ];
 
 // Colors for console output

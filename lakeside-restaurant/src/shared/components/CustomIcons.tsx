@@ -568,3 +568,50 @@ export const ChevronForwardIcon: React.FC<IconProps> = ({ size = 24, color = '#9
     <Path d="M9 18l6-6-6-6" stroke={color} strokeWidth="2" fill="none"/>
   </Svg>
 );
+
+export const BulkOperationsIcon: React.FC<IconProps> = ({ size = 24, color = '#FF6B35' }) => (
+  <Svg width={size} height={size} viewBox="0 0 24 24" fill="none">
+    <Defs>
+      <LinearGradient id="bulkOperationsGradient" x1="0%" y1="0%" x2="100%" y2="100%">
+        <Stop offset="0%" stopColor="#FF8A65" />
+        <Stop offset="100%" stopColor="#FF6B35" />
+      </LinearGradient>
+    </Defs>
+    {/* Multiple checkboxes representing bulk selection */}
+    <Rect x="3" y="3" width="6" height="6" rx="1" stroke="url(#bulkOperationsGradient)" strokeWidth="2" fill="none"/>
+    <Path d="M5 6l1 1 2-2" stroke="url(#bulkOperationsGradient)" strokeWidth="2" fill="none"/>
+    
+    <Rect x="3" y="11" width="6" height="6" rx="1" stroke="url(#bulkOperationsGradient)" strokeWidth="2" fill="none"/>
+    <Path d="M5 14l1 1 2-2" stroke="url(#bulkOperationsGradient)" strokeWidth="2" fill="none"/>
+    
+    <Rect x="11" y="3" width="6" height="6" rx="1" stroke="url(#bulkOperationsGradient)" strokeWidth="2" fill="none"/>
+    <Path d="M13 6l1 1 2-2" stroke="url(#bulkOperationsGradient)" strokeWidth="2" fill="none"/>
+    
+    <Rect x="11" y="11" width="6" height="6" rx="1" stroke="url(#bulkOperationsGradient)" strokeWidth="2" fill="none"/>
+    <Path d="M13 14l1 1 2-2" stroke="url(#bulkOperationsGradient)" strokeWidth="2" fill="none"/>
+    
+    {/* Action arrows */}
+    <Path d="M19 8h3" stroke="url(#bulkOperationsGradient)" strokeWidth="2"/>
+    <Path d="M20 6l2 2-2 2" stroke="url(#bulkOperationsGradient)" strokeWidth="2" fill="none"/>
+  </Svg>
+);
+
+export const CategoryManagementIcon: React.FC<IconProps> = ({ size = 24, color = '#FF6B35' }) => (
+  <Svg width={size} height={size} viewBox="0 0 24 24" fill="none">
+    <Defs>
+      <LinearGradient id="categoryManagementGradient" x1="0%" y1="0%" x2="100%" y2="100%">
+        <Stop offset="0%" stopColor="#FF8A65" />
+        <Stop offset="100%" stopColor="#FF6B35" />
+      </LinearGradient>
+    </Defs>
+    {/* Folder structure representing categories */}
+    <Path d="M22 19a2 2 0 01-2 2H4a2 2 0 01-2-2V5a2 2 0 012-2h5l2 3h9a2 2 0 012 2z" stroke="url(#categoryManagementGradient)" strokeWidth="2" fill="none"/>
+    
+    {/* Settings gear overlay */}
+    <Circle cx="18" cy="15" r="3" stroke="url(#categoryManagementGradient)" strokeWidth="2" fill="none"/>
+    <Path d="M18 12v6" stroke="url(#categoryManagementGradient)" strokeWidth="1.5"/>
+    <Path d="M15.5 15h5" stroke="url(#categoryManagementGradient)" strokeWidth="1.5"/>
+    <Path d="M16.5 13.5l3 3" stroke="url(#categoryManagementGradient)" strokeWidth="1.5"/>
+    <Path d="M16.5 16.5l3-3" stroke="url(#categoryManagementGradient)" strokeWidth="1.5"/>
+  </Svg>
+);
