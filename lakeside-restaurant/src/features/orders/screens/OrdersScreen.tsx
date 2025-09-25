@@ -9,11 +9,14 @@ import {
   RefreshControl,
   Image,
 } from 'react-native';
+import { useNavigation } from '@react-navigation/native';
+import { StackNavigationProp } from '@react-navigation/stack';
 import { Ionicons } from '@expo/vector-icons';
 import { CookingIcon, ClockIcon, CheckIcon } from '../../../shared/components/CustomIcons';
 import { Colors } from '../../../shared/theme/colors';
 import { Typography } from '../../../shared/theme/typography';
 import { Spacing } from '../../../shared/theme/spacing';
+import { RootStackParamList } from '../../../navigation/AppNavigator';
 import { useOrders } from '../context/OrdersContext';
 
 // Order status enum matching backend Prisma schema
@@ -56,7 +59,10 @@ interface Order {
   orderItems: OrderItem[];
 }
 
+type OrdersScreenNavigationProp = StackNavigationProp<RootStackParamList>;
+
 const OrdersScreen: React.FC = () => {
+  const navigation = useNavigation<OrdersScreenNavigationProp>();
   const { 
     orders, 
     loading, 
@@ -209,8 +215,17 @@ const OrdersScreen: React.FC = () => {
   const deliveredCount = orders.filter(order => order.status === 'DELIVERED').length;
   const cancelledCount = orders.filter(o => o.status === 'CANCELLED').length;
 
+  const handleOrderPress = (orderId: number) => {
+    navigation.navigate('OrderDetail', { orderId });
+  };
+
   const renderOrderCard = (order: Order) => (
-    <View key={order.id} style={styles.orderCard}>
+    <TouchableOpacity 
+      key={order.id} 
+      style={styles.orderCard}
+      onPress={() => handleOrderPress(order.id)}
+      activeOpacity={0.7}
+    >
       <View style={styles.orderHeader}>
         <View style={styles.orderNumberContainer}>
           <Text style={styles.orderNumber}>Order #{order.id}</Text>
@@ -331,7 +346,13 @@ const OrdersScreen: React.FC = () => {
         )}
         {/* READY status - no button, waiting for driver pickup */}
       </View>
-    </View>
+      
+      {/* Tap to view details indicator */}
+      <View style={styles.tapIndicator}>
+        <Ionicons name="chevron-forward" size={16} color={Colors.text.tertiary} />
+        <Text style={styles.tapIndicatorText}>Tap to view details</Text>
+      </View>
+    </TouchableOpacity>
   );
 
   return (
@@ -790,6 +811,20 @@ const styles = StyleSheet.create({
     color: Colors.text.disabled,
     marginTop: Spacing.xs,
     textAlign: 'center',
+  },
+  tapIndicator: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingTop: Spacing.sm,
+    marginTop: Spacing.sm,
+    borderTopWidth: 1,
+    borderTopColor: Colors.border.light,
+  },
+  tapIndicatorText: {
+    fontSize: Typography.fontSize.xs,
+    color: Colors.text.tertiary,
+    marginLeft: Spacing.xs,
   },
 });
 

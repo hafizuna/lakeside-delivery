@@ -615,3 +615,73 @@ export const CategoryManagementIcon: React.FC<IconProps> = ({ size = 24, color =
     <Path d="M16.5 16.5l3-3" stroke="url(#categoryManagementGradient)" strokeWidth="1.5"/>
   </Svg>
 );
+
+// Additional icons for OrderDetailScreen
+export const PhoneIcon: React.FC<IconProps> = ({ size = 24, color = '#4CAF50' }) => (
+  <Svg width={size} height={size} viewBox="0 0 24 24" fill="none">
+    <Defs>
+      <LinearGradient id="phoneGradient" x1="0%" y1="0%" x2="100%" y2="100%">
+        <Stop offset="0%" stopColor="#81C784" />
+        <Stop offset="100%" stopColor="#4CAF50" />
+      </LinearGradient>
+    </Defs>
+    <Path d="M22 16.92v3a2 2 0 01-2.18 2 19.79 19.79 0 01-8.63-3.07 19.5 19.5 0 01-6-6 19.79 19.79 0 01-3.07-8.67A2 2 0 014.11 2h3a2 2 0 012 1.72 12.84 12.84 0 00.7 2.81 2 2 0 01-.45 2.11L8.09 9.91a16 16 0 006 6l1.27-1.27a2 2 0 012.11-.45 12.84 12.84 0 002.81.7A2 2 0 0122 16.92z" stroke="url(#phoneGradient)" strokeWidth="2" fill="none"/>
+  </Svg>
+);
+
+export const LocationIcon: React.FC<IconProps> = ({ size = 24, color = '#FF6B35' }) => (
+  <Svg width={size} height={size} viewBox="0 0 24 24" fill="none">
+    <Defs>
+      <LinearGradient id="locationGradient" x1="0%" y1="0%" x2="100%" y2="100%">
+        <Stop offset="0%" stopColor="#FF8A65" />
+        <Stop offset="100%" stopColor="#FF6B35" />
+      </LinearGradient>
+    </Defs>
+    <Path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0118 0z" stroke="url(#locationGradient)" strokeWidth="2" fill="none"/>
+    <Circle cx="12" cy="10" r="3" stroke="url(#locationGradient)" strokeWidth="2" fill="none"/>
+  </Svg>
+);
+
+export const CashIcon: React.FC<IconProps> = ({ size = 24, color = '#4CAF50' }) => (
+  <Svg width={size} height={size} viewBox="0 0 24 24" fill="none">
+    <Defs>
+      <LinearGradient id="cashGradient" x1="0%" y1="0%" x2="100%" y2="100%">
+        <Stop offset="0%" stopColor="#81C784" />
+        <Stop offset="100%" stopColor="#4CAF50" />
+      </LinearGradient>
+    </Defs>
+    <Rect x="1" y="4" width="22" height="16" rx="2" ry="2" stroke="url(#cashGradient)" strokeWidth="2" fill="none"/>
+    <Path d="M12 8v8" stroke="url(#cashGradient)" strokeWidth="2"/>
+    <Path d="M8 10h4a2 2 0 010 4H8" stroke="url(#cashGradient)" strokeWidth="2" fill="none"/>
+    <Path d="M16 10h-4a2 2 0 000 4h4" stroke="url(#cashGradient)" strokeWidth="2" fill="none"/>
+  </Svg>
+);
+
+export const WalletIcon: React.FC<IconProps> = ({ size = 24, color = '#2196F3' }) => (
+  <Svg width={size} height={size} viewBox="0 0 24 24" fill="none">
+    <Defs>
+      <LinearGradient id="walletGradient" x1="0%" y1="0%" x2="100%" y2="100%">
+        <Stop offset="0%" stopColor="#64B5F6" />
+        <Stop offset="100%" stopColor="#2196F3" />
+      </LinearGradient>
+    </Defs>
+    <Path d="M21 12V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2h14a2 2 0 002-2v-5" stroke="url(#walletGradient)" strokeWidth="2" fill="none"/>
+    <Path d="M16 12h5l-2-2" stroke="url(#walletGradient)" strokeWidth="2" fill="none"/>
+    <Path d="M16 12h5l-2 2" stroke="url(#walletGradient)" strokeWidth="2" fill="none"/>
+    <Circle cx="7" cy="12" r="1" fill="url(#walletGradient)"/>
+  </Svg>
+);
+
+export const InfoIcon: React.FC<IconProps> = ({ size = 24, color = '#2196F3' }) => (
+  <Svg width={size} height={size} viewBox="0 0 24 24" fill="none">
+    <Defs>
+      <LinearGradient id="infoGradient" x1="0%" y1="0%" x2="100%" y2="100%">
+        <Stop offset="0%" stopColor="#64B5F6" />
+        <Stop offset="100%" stopColor="#2196F3" />
+      </LinearGradient>
+    </Defs>
+    <Circle cx="12" cy="12" r="10" stroke="url(#infoGradient)" strokeWidth="2" fill="none"/>
+    <Path d="M12 16v-4" stroke="url(#infoGradient)" strokeWidth="2"/>
+    <Path d="M12 8h.01" stroke="url(#infoGradient)" strokeWidth="2"/>
+  </Svg>
+);

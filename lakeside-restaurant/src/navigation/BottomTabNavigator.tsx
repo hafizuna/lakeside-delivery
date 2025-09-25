@@ -2,7 +2,7 @@ import React from 'react';
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
 import { View, Text, StyleSheet } from 'react-native';
 import DashboardScreen from '../features/dashboard/screens/DashboardScreen';
-import OrdersScreen from '../features/orders/screens/OrdersScreen';
+import EnhancedOrdersScreen from '../features/orders/screens/EnhancedOrdersScreen';
 import MenuScreen from '../features/menu/screens/MenuScreen';
 import ProfileScreen from '../features/profile/screens/ProfileScreen';
 import { HomeIcon, OrdersIcon, InventoryIcon, ProfileIcon } from '../shared/components/CustomIcons';
@@ -43,7 +43,7 @@ const BottomTabNavigator: React.FC = () => {
       />
       <Tab.Screen
         name="Orders"
-        component={OrdersScreen}
+        component={EnhancedOrdersScreen}
         options={{
           tabBarIcon: ({ color, focused }) => (
             <View style={[styles.iconContainer, focused && styles.activeIconContainer]}>
