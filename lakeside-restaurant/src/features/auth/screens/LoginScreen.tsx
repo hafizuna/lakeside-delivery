@@ -35,11 +35,12 @@ const LoginScreen: React.FC = () => {
     }
 
     try {
-      const success = await login(phone.trim(), password);
-      if (success) {
-        navigation.navigate('Main');
+      const result = await login(phone.trim(), password);
+      if (result.success) {
+        // Navigation will happen automatically due to authentication-aware AppNavigator
+        // No manual navigation needed
       } else {
-        Alert.alert('Login Failed', 'Invalid phone number or password');
+        Alert.alert('Login Failed', result.message || 'Invalid phone number or password');
       }
     } catch (error) {
       Alert.alert('Error', 'An error occurred during login. Please try again.');
@@ -92,7 +93,7 @@ const LoginScreen: React.FC = () => {
 
           <View style={styles.signupContainer}>
             <Text style={styles.signupText}>Don't have an account? </Text>
-            <TouchableOpacity>
+            <TouchableOpacity onPress={() => navigation.navigate('RestaurantSignup')}>
               <Text style={styles.signupLink}>Register Restaurant</Text>
             </TouchableOpacity>
           </View>

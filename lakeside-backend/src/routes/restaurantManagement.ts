@@ -1,6 +1,6 @@
 import express from 'express';
 import { authenticateToken } from '../middleware/auth';
-import { restaurantLogin, getRestaurantProfile, updateRestaurantProfile } from '../controllers/restaurantController';
+import { restaurantLogin, restaurantRegister, getRestaurantProfile, updateRestaurantProfile } from '../controllers/restaurantController';
 import { 
   getMenuItems, 
   createMenuItem, 
@@ -29,6 +29,7 @@ import {
 const router = express.Router();
 
 // Authentication routes
+router.post('/auth/register', restaurantRegister);
 router.post('/auth/login', restaurantLogin);
 router.get('/auth/profile', authenticateToken, getRestaurantProfile);
 

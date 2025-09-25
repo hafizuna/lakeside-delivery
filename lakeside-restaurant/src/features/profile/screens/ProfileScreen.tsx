@@ -125,15 +125,13 @@ const ProfileScreen: React.FC = () => {
     Alert.alert('Support', 'Support feature coming soon!');
   };
 
-  const handleLogout = () => {
-    Alert.alert(
-      'Logout',
-      'Are you sure you want to logout?',
-      [
-        { text: 'Cancel', style: 'cancel' },
-        { text: 'Logout', style: 'destructive', onPress: logout },
-      ]
-    );
+  const handleLogout = async () => {
+    try {
+      await logout();
+      // Navigation will happen automatically due to authentication-aware AppNavigator
+    } catch (error) {
+      console.error('Logout error:', error);
+    }
   };
 
   if (loading) {

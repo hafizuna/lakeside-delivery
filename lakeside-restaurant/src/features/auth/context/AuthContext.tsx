@@ -14,15 +14,25 @@ interface Restaurant {
   rating?: number;
   totalOrders: number;
   description?: string;
+  businessLicense?: string;
+  approved: boolean;
   commissionRate: number;
   status: 'OPEN' | 'CLOSED' | 'SUSPENDED';
+}
+
+export interface RestaurantSignupData {
+  name: string;
+  phone: string;
+  password: string;
+  businessLicense?: string;
 }
 
 interface AuthContextType {
   isAuthenticated: boolean;
   restaurant: Restaurant | null;
   loading: boolean;
-  login: (phone: string, password: string) => Promise<boolean>;
+  login: (phone: string, password: string) => Promise<{ success: boolean; message?: string }>;
+  register: (signupData: RestaurantSignupData) => Promise<{ success: boolean; message?: string }>;
   logout: () => Promise<void>;
   updateRestaurant: (restaurant: Restaurant) => void;
 }
@@ -44,26 +54,26 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
 
   const checkAuthStatus = async () => {
     try {
-      const token = await AsyncStorage.getItem('restaurant_token');
-      if (token) {
-        const response = await apiService.getProfile();
-        if (response.success && response.data) {
-          setRestaurant(response.data);
-          setIsAuthenticated(true);
-        } else {
-          // Token is invalid, remove it
-          await AsyncStorage.removeItem('restaurant_token');
-        }
+      // Let the apiService handle token loading and validation
+      const response = await apiService.getProfile();
+      if (response.success && response.data) {
+        setRestaurant(response.data);
+        setIsAuthenticated(true);
+      } else {
+        // Profile fetch failed, user is not authenticated
+        setIsAuthenticated(false);
+        setRestaurant(null);
       }
     } catch (error) {
       console.error('Error checking auth status:', error);
-      await AsyncStorage.removeItem('restaurant_token');
+      setIsAuthenticated(false);
+      setRestaurant(null);
     } finally {
       setLoading(false);
     }
   };
 
-  const login = async (phone: string, password: string): Promise<boolean> => {
+  const login = async (phone: string, password: string): Promise<{ success: boolean; message?: string }> => {
     try {
       setLoading(true);
       const normalizedPhone = normalizeEthiopianPhone(phone);
@@ -72,13 +82,35 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
       if (response.success && response.data) {
         setRestaurant(response.data.restaurant);
         setIsAuthenticated(true);
-        return true;
+        return { success: true };
       } else {
-        return false;
+        return { success: false, message: response.message || 'Invalid phone number or password' };
       }
     } catch (error) {
       console.error('Login error:', error);
-      return false;
+      return { success: false, message: 'An error occurred during login. Please try again.' };
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const register = async (signupData: RestaurantSignupData): Promise<{ success: boolean; message?: string }> => {
+    try {
+      setLoading(true);
+      const normalizedPhone = normalizeEthiopianPhone(signupData.phone);
+      const response = await apiService.register({
+        ...signupData,
+        phone: normalizedPhone,
+      });
+      
+      if (response.success) {
+        return { success: true, message: response.message };
+      } else {
+        return { success: false, message: response.message };
+      }
+    } catch (error) {
+      console.error('Registration error:', error);
+      return { success: false, message: 'An error occurred during registration' };
     } finally {
       setLoading(false);
     }
@@ -103,6 +135,7 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
     restaurant,
     loading,
     login,
+    register,
     logout,
     updateRestaurant,
   };

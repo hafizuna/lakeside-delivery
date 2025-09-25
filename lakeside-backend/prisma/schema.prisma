@@ -66,6 +66,8 @@ model Restaurant {
   rating           Float?            @default(0)
   totalOrders      Int               @default(0) @map("total_orders")
   description      String?
+  businessLicense  String?           @map("business_license")
+  approved         Boolean           @default(false)
   geofenceZoneId   Int?              @map("geofence_zone_id")
   commissionRate   Decimal           @default(15.00) @map("commission_rate") @db.Decimal(5, 2)
   status           RestaurantStatus  @default(OPEN)

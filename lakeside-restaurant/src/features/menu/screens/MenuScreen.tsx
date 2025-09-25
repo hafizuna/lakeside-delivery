@@ -15,6 +15,7 @@ import { StackNavigationProp } from '@react-navigation/stack';
 import { SettingsIcon, EditIcon, PlusIcon, BulkOperationsIcon, CategoryManagementIcon } from '../../../shared/components/CustomIcons';
 import { Colors } from '../../../shared/theme/colors';
 import { Typography } from '../../../shared/theme/typography';
+import { Spacing } from '../../../shared/theme/spacing';
 import { RootStackParamList } from '../../../navigation/AppNavigator';
 import { useMenu } from '../context/MenuContext';
 
@@ -235,14 +236,17 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: Colors.background.secondary,
-    paddingHorizontal: 20,
   },
   header: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    paddingTop: 20,
-    paddingBottom: 16,
+    paddingHorizontal: Spacing.lg,
+    paddingTop: Spacing.xl + 10,
+    paddingBottom: Spacing.md,
+    backgroundColor: Colors.background.primary,
+    borderBottomWidth: 1,
+    borderBottomColor: Colors.border.light,
   },
   title: {
     fontSize: Typography.fontSize.xxl,
@@ -294,9 +298,11 @@ const styles = StyleSheet.create({
   },
   categoriesContainer: {
     marginBottom: 20,
+    backgroundColor: Colors.background.primary,
+    paddingVertical: Spacing.sm,
   },
   categoriesScrollContent: {
-    paddingHorizontal: 4,
+    paddingHorizontal: Spacing.lg,
   },
   categoryFilterButton: {
     paddingHorizontal: 16,
@@ -321,6 +327,7 @@ const styles = StyleSheet.create({
     fontWeight: Typography.fontWeight.semiBold,
   },
   menuList: {
+    paddingHorizontal: Spacing.lg,
     paddingBottom: 100,
   },
   menuItemCard: {
@@ -423,7 +430,7 @@ const styles = StyleSheet.create({
   floatingAddButton: {
     position: 'absolute',
     bottom: 30,
-    right: 20,
+    right: Spacing.lg,
     backgroundColor: Colors.primary.main,
     borderRadius: 28,
     padding: 16,

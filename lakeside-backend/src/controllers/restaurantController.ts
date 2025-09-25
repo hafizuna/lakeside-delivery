@@ -1,11 +1,116 @@
 import { Request, Response } from 'express';
 import { PrismaClient } from '@prisma/client';
 import { validateLoginData, normalizePhone } from '../utils/validation';
-import { comparePassword } from '../utils/password';
+import { comparePassword, hashPassword } from '../utils/password';
 import { generateToken } from '../utils/jwt';
 import { AuthenticatedRequest } from '../types/auth';
 
 const prisma = new PrismaClient();
+
+/**
+ * Restaurant Registration Controller
+ */
+export const restaurantRegister = async (req: Request, res: Response) => {
+  try {
+    console.log('Restaurant registration request:', req.body);
+    const { name, phone, password, businessLicense } = req.body;
+
+    // Basic validation
+    if (!name || !phone || !password) {
+      return res.status(400).json({
+        success: false,
+        message: 'Name, phone, and password are required',
+      });
+    }
+
+    // Validate phone and password
+    const validation = validateLoginData({ phone, password });
+    if (!validation.isValid) {
+      return res.status(400).json({
+        success: false,
+        message: 'Validation failed',
+        errors: validation.errors,
+      });
+    }
+
+    // Normalize phone number
+    const normalizedPhone = normalizePhone(phone);
+
+    // Check if user already exists
+    const existingUser = await prisma.user.findUnique({
+      where: { phone: normalizedPhone },
+    });
+
+    if (existingUser) {
+      return res.status(409).json({
+        success: false,
+        message: 'An account with this phone number already exists',
+      });
+    }
+
+    // Hash password
+    const hashedPassword = await hashPassword(password);
+
+    // Create user and restaurant profile in a transaction
+    const result = await prisma.$transaction(async (tx) => {
+      // Create user
+      const newUser = await tx.user.create({
+        data: {
+          name: name.trim(),
+          phone: normalizedPhone,
+          passwordHash: hashedPassword,
+          role: 'RESTAURANT',
+          status: 'ACTIVE',
+        },
+      });
+
+      // Create restaurant profile with placeholder data
+      const newRestaurant = await tx.restaurant.create({
+        data: {
+          id: newUser.id,
+          name: name.trim(),
+          address: 'Address to be updated', // Placeholder
+          lat: 9.03, // Placeholder - Addis Ababa coordinates
+          lng: 38.74, // Placeholder
+          businessLicense: businessLicense || null,
+          approved: false, // Requires admin approval
+          description: null,
+          logoUrl: null,
+          bannerUrl: null,
+          rating: 0,
+          totalOrders: 0,
+          commissionRate: 15.00,
+          status: 'CLOSED', // Start as closed until approved
+        },
+      });
+
+      // Create restaurant wallet
+      await tx.restaurantWallet.create({
+        data: {
+          restaurantId: newUser.id,
+          balance: 0.00,
+          totalEarnings: 0.00,
+          totalCommissionPaid: 0.00,
+          totalPayouts: 0.00,
+        },
+      });
+
+      return { user: newUser, restaurant: newRestaurant };
+    });
+
+    console.log('Restaurant registration successful for:', normalizedPhone);
+    res.status(201).json({
+      success: true,
+      message: 'Restaurant registration submitted successfully. Please wait for admin approval.',
+    });
+  } catch (error) {
+    console.error('Restaurant registration error:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Internal server error during registration',
+    });
+  }
+};
 
 /**
  * Restaurant Authentication Controller
@@ -63,6 +168,14 @@ export const restaurantLogin = async (req: Request, res: Response) => {
       });
     }
 
+    // Check if restaurant is approved
+    if (!user.restaurantProfile.approved) {
+      return res.status(200).json({
+        success: false,
+        message: 'Your restaurant account is pending approval. Please wait for admin approval before logging in.',
+      });
+    }
+
     // Generate JWT token
     const token = generateToken({
       id: user.id,
@@ -85,6 +198,8 @@ export const restaurantLogin = async (req: Request, res: Response) => {
           rating: user.restaurantProfile.rating,
           totalOrders: user.restaurantProfile.totalOrders,
           description: user.restaurantProfile.description,
+          businessLicense: user.restaurantProfile.businessLicense,
+          approved: user.restaurantProfile.approved,
           commissionRate: Number(user.restaurantProfile.commissionRate),
           status: user.restaurantProfile.status,
         },
@@ -143,6 +258,8 @@ export const getRestaurantProfile = async (req: AuthenticatedRequest, res: Respo
         rating: user.restaurantProfile.rating,
         totalOrders: user.restaurantProfile.totalOrders,
         description: user.restaurantProfile.description,
+        businessLicense: user.restaurantProfile.businessLicense,
+        approved: user.restaurantProfile.approved,
         commissionRate: Number(user.restaurantProfile.commissionRate),
         status: user.restaurantProfile.status,
       },

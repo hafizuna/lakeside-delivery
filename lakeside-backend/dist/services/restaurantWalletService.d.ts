@@ -17,8 +17,8 @@ declare class RestaurantWalletServiceImpl implements RestaurantWalletService {
                 restaurantId: number;
                 updatedAt: Date;
                 balance: Prisma.Decimal;
-                totalEarnings: Prisma.Decimal;
                 isActive: boolean;
+                totalEarnings: Prisma.Decimal;
                 lastEarningAt: Date | null;
                 totalCommissionPaid: Prisma.Decimal;
                 totalPayouts: Prisma.Decimal;
@@ -52,8 +52,8 @@ declare class RestaurantWalletServiceImpl implements RestaurantWalletService {
                 restaurantId: number;
                 updatedAt: Date;
                 balance: Prisma.Decimal;
-                totalEarnings: Prisma.Decimal;
                 isActive: boolean;
+                totalEarnings: Prisma.Decimal;
                 lastEarningAt: Date | null;
                 totalCommissionPaid: Prisma.Decimal;
                 totalPayouts: Prisma.Decimal;
@@ -98,8 +98,8 @@ declare class RestaurantWalletServiceImpl implements RestaurantWalletService {
                 restaurantId: number;
                 updatedAt: Date;
                 balance: Prisma.Decimal;
-                totalEarnings: Prisma.Decimal;
                 isActive: boolean;
+                totalEarnings: Prisma.Decimal;
                 lastEarningAt: Date | null;
                 totalCommissionPaid: Prisma.Decimal;
                 totalPayouts: Prisma.Decimal;
@@ -128,8 +128,8 @@ declare class RestaurantWalletServiceImpl implements RestaurantWalletService {
                 restaurantId: number;
                 updatedAt: Date;
                 balance: Prisma.Decimal;
-                totalEarnings: Prisma.Decimal;
                 isActive: boolean;
+                totalEarnings: Prisma.Decimal;
                 lastEarningAt: Date | null;
                 totalCommissionPaid: Prisma.Decimal;
                 totalPayouts: Prisma.Decimal;
@@ -155,8 +155,8 @@ declare class RestaurantWalletServiceImpl implements RestaurantWalletService {
                     restaurantId: number;
                     updatedAt: Date;
                     balance: Prisma.Decimal;
-                    totalEarnings: Prisma.Decimal;
                     isActive: boolean;
+                    totalEarnings: Prisma.Decimal;
                     lastEarningAt: Date | null;
                     totalCommissionPaid: Prisma.Decimal;
                     totalPayouts: Prisma.Decimal;

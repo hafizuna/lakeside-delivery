@@ -11,6 +11,7 @@ const categoryController_1 = require("../controllers/categoryController");
 const ordersController_1 = require("../controllers/ordersController");
 const router = express_1.default.Router();
 // Authentication routes
+router.post('/auth/register', restaurantController_1.restaurantRegister);
 router.post('/auth/login', restaurantController_1.restaurantLogin);
 router.get('/auth/profile', auth_1.authenticateToken, restaurantController_1.getRestaurantProfile);
 // Profile management

@@ -1,6 +1,10 @@
 import { Request, Response } from 'express';
 import { AuthenticatedRequest } from '../types/auth';
 /**
+ * Restaurant Registration Controller
+ */
+export declare const restaurantRegister: (req: Request, res: Response) => Promise<Response<any, Record<string, any>> | undefined>;
+/**
  * Restaurant Authentication Controller
  */
 export declare const restaurantLogin: (req: Request, res: Response) => Promise<Response<any, Record<string, any>> | undefined>;

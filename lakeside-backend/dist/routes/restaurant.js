@@ -38,6 +38,18 @@ router.get('/', async (req, res) => {
                         itemName: true,
                         price: true,
                         imageUrl: true,
+                        isAvailable: true,
+                        description: true,
+                        categoryId: true,
+                        category: {
+                            select: {
+                                id: true,
+                                name: true,
+                                slug: true,
+                                icon: true,
+                                sortOrder: true,
+                            }
+                        }
                     },
                     where: {
                         isAvailable: true,
@@ -56,10 +68,18 @@ router.get('/', async (req, res) => {
             take: parseInt(limit),
             skip: parseInt(offset),
         });
-        // Transform response to include calculated order count
+        // Transform response to include calculated order count and backward compatibility
         const restaurantsWithStats = restaurants.map(restaurant => ({
             ...restaurant,
             totalOrders: restaurant._count.orders,
+            // Transform menu items for backward compatibility
+            menus: restaurant.menus.map(menu => ({
+                ...menu,
+                // Add legacy category string field for backward compatibility
+                category: menu.category?.name || null,
+                // Keep the new category object structure as well
+                categoryObject: menu.category
+            })),
             // Remove _count from response
             _count: undefined,
         }));
@@ -74,6 +94,66 @@ router.get('/', async (req, res) => {
         res.status(500).json({
             success: false,
             message: 'Failed to fetch restaurants',
+        });
+    }
+});
+/**
+ * GET /api/restaurants/categories
+ * Get list of food categories (backward compatible)
+ */
+router.get('/categories', async (req, res) => {
+    console.log('GET /api/restaurants/categories called');
+    try {
+        // Get all active categories from database
+        let categories = [];
+        try {
+            categories = await database_1.default.category.findMany({
+                where: {
+                    isActive: true
+                },
+                select: {
+                    id: true,
+                    name: true,
+                    slug: true,
+                    icon: true,
+                    sortOrder: true
+                },
+                orderBy: {
+                    sortOrder: 'asc'
+                }
+            });
+        }
+        catch (dbError) {
+            console.log('Categories table might not exist or be empty:', dbError?.message || dbError);
+            categories = [];
+        }
+        // For backward compatibility, return both formats
+        // Legacy format: array of strings
+        const legacyCategories = categories.map(cat => cat.name);
+        // Add some fallback categories if database is empty
+        const fallbackCategories = [
+            'Burgers', 'Pizza', 'Cookies', 'Chicken',
+            'Seafood', 'Vegetarian', 'Desserts', 'Beverages'
+        ];
+        const categoryNames = legacyCategories.length > 0 ? legacyCategories : fallbackCategories;
+        console.log('Returning categories:', categoryNames);
+        console.log('Full category objects:', categories);
+        res.json({
+            success: true,
+            data: categoryNames, // Legacy format for backward compatibility
+            categories: categories // New format with full objects
+        });
+    }
+    catch (error) {
+        console.error('Error fetching categories:', error);
+        // Fallback to static categories on error
+        const fallbackCategories = [
+            'Burgers', 'Pizza', 'Cookies', 'Chicken',
+            'Seafood', 'Vegetarian', 'Desserts', 'Beverages'
+        ];
+        res.json({
+            success: true,
+            data: fallbackCategories
         });
     }
 });
@@ -93,11 +173,29 @@ router.get('/:id', async (req, res) => {
                     },
                 },
                 menus: {
+                    select: {
+                        id: true,
+                        itemName: true,
+                        description: true,
+                        price: true,
+                        imageUrl: true,
+                        isAvailable: true,
+                        categoryId: true,
+                        category: {
+                            select: {
+                                id: true,
+                                name: true,
+                                slug: true,
+                                icon: true,
+                                sortOrder: true,
+                            }
+                        }
+                    },
                     where: {
                         isAvailable: true,
                     },
                     orderBy: {
-                        itemName: 'asc',
+                        itemName: 'asc'
                     },
                 },
                 _count: {
@@ -113,10 +211,18 @@ router.get('/:id', async (req, res) => {
                 message: 'Restaurant not found',
             });
         }
-        // Transform response to include calculated order count
+        // Transform response to include calculated order count and backward compatibility
         const restaurantWithStats = {
             ...restaurant,
             totalOrders: restaurant._count.orders,
+            // Transform menu items for backward compatibility
+            menus: restaurant.menus.map(menu => ({
+                ...menu,
+                // Add legacy category string field for backward compatibility
+                category: menu.category?.name || null,
+                // Keep the new category object structure as well
+                categoryObject: menu.category
+            })),
             // Remove _count from response
             _count: undefined,
         };
@@ -130,38 +236,6 @@ router.get('/:id', async (req, res) => {
         res.status(500).json({
             success: false,
             message: 'Failed to fetch restaurant details',
-        });
-    }
-});
-/**
- * GET /api/restaurants/categories
- * Get list of food categories
- */
-router.get('/categories', async (req, res) => {
-    console.log('GET /api/restaurants/categories called');
-    try {
-        // Static categories for now since the schema doesn't have a categories table
-        const categories = [
-            'Burgers',
-            'Pizza',
-            'Cookies',
-            'Chicken',
-            'Seafood',
-            'Vegetarian',
-            'Desserts',
-            'Beverages'
-        ];
-        console.log('Returning categories:', categories);
-        res.json({
-            success: true,
-            data: categories
-        });
-    }
-    catch (error) {
-        console.error('Error fetching categories:', error);
-        res.status(500).json({
-            success: false,
-            message: 'Failed to fetch categories'
         });
     }
 });

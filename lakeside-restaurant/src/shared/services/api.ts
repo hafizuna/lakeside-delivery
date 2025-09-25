@@ -122,6 +122,19 @@ class ApiService {
     return response;
   }
 
+  async register(signupData: any): Promise<ApiResponse<{ token: string; restaurant: any }>> {
+    const response = await this.request<{ token: string; restaurant: any }>('/restaurant/auth/register', {
+      method: 'POST',
+      body: JSON.stringify(signupData),
+    });
+
+    if (response.success && response.data?.token) {
+      await this.saveToken(response.data.token);
+    }
+
+    return response;
+  }
+
   async logout(): Promise<void> {
     await this.removeToken();
   }
