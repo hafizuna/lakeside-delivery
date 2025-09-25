@@ -17,14 +17,22 @@ const verifySocketToken = async (token) => {
             return { valid: false, error: 'JWT secret not configured' };
         }
         const decoded = jsonwebtoken_1.default.verify(token, process.env.JWT_SECRET);
-        if (!decoded || !decoded.userId) {
-            return { valid: false, error: 'Invalid token payload' };
+        console.log('🔍 JWT token decoded:', {
+            id: decoded.id,
+            userId: decoded.userId,
+            keys: Object.keys(decoded)
+        });
+        // Handle both 'id' and 'userId' field names (our JWT uses 'id')
+        const userId = decoded.userId || decoded.id;
+        if (!decoded || !userId) {
+            return { valid: false, error: 'Invalid token payload - no user ID found' };
         }
         // Verify user exists in database
         const user = await prisma.user.findUnique({
-            where: { id: decoded.userId },
+            where: { id: userId },
             select: { id: true, phone: true, role: true }
         });
+        console.log('💭 User lookup result:', user ? { id: user.id, phone: user.phone } : 'User not found');
         if (!user) {
             return { valid: false, error: 'User not found' };
         }
@@ -55,7 +63,7 @@ const socketAuthMiddleware = (socket, next) => {
     console.log('🔌 New socket connection attempt:', socket.id);
     // Set up authentication handler
     socket.on('authenticate', async (authData) => {
-        console.log('🔐 Socket authentication attempt for user:', authData.userId);
+        console.log('🔐 Socket authentication attempt:', { hasToken: !!authData.token });
         try {
             const { valid, userId, error } = await (0, exports.verifySocketToken)(authData.token);
             if (valid && userId) {

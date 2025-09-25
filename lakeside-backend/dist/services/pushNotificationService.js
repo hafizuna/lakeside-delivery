@@ -27,8 +27,9 @@ class PushNotificationService {
             // Check if user is connected via socket (real-time)
             const isUserConnectedViaSocket = socketService_1.default.isUserConnected(userId);
             if (isUserConnectedViaSocket) {
-                console.log(`📱 User ${userId} is connected via socket, skipping push notification`);
-                return true; // Socket will handle the notification
+                console.log(`📱 User ${userId} is connected via socket, but sending push notification anyway for testing`);
+                // For testing: send push notification even when socket is connected
+                // In production, you might want to skip this to avoid duplicates
             }
             // User is not connected, send push notification
             console.log(`📱 User ${userId} not connected via socket, sending push notification`);
@@ -126,8 +127,13 @@ class PushNotificationService {
                 }
             });
             // TODO: Implement push token storage in database
-            // For now, return null - this will be implemented when we add token storage
-            console.warn(`📱 Push token retrieval not implemented for user ${userId}`);
+            // For testing: return a dummy token that will be replaced with real token from your app
+            console.log(`📱 Using test push token for user ${userId} (implement proper storage later)`);
+            // TEMPORARY: Return a test token - replace with actual token from your app
+            // You'll get the real token from your React Native app logs
+            if (userId === 1) {
+                return 'REPLACE_WITH_REAL_TOKEN_FROM_APP_LOGS'; // Replace this with actual token
+            }
             return null;
         }
         catch (error) {

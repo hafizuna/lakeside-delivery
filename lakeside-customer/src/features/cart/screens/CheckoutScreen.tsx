@@ -13,7 +13,7 @@ import { BackIcon, CheckIcon, CreditCardIcon, CashIcon, WalletIcon, MapIcon, Clo
 import MapAddressPicker from '../../../shared/components/MapAddressPicker';
 import { Colors } from '../../../shared/theme/colors';
 import { useCart } from '../context/CartContext';
-import { orderAPI, walletAPI } from '../../../shared/services/api';
+import { orderAPI, walletAPI, restaurantAPI, Restaurant } from '../../../shared/services/api';
 import { PaymentMethod } from '../../../shared/types/Order';
 import { useToast } from '../../../shared/context/ToastContext';
 import { useLocation } from '../../../shared/context/LocationContext';
@@ -55,11 +55,16 @@ const CheckoutScreen: React.FC<CheckoutScreenProps> = ({ onBackPress, onOrderCom
   const [walletLoading, setWalletLoading] = useState(true);
   const [walletError, setWalletError] = useState<string | null>(null);
   const [deliveryFeeCalculated, setDeliveryFeeCalculated] = useState<number>(5.00);
+  const [restaurant, setRestaurant] = useState<Restaurant | null>(null);
+  const [restaurantLoading, setRestaurantLoading] = useState(false);
 
-  // Fetch wallet balance on component mount
+  // Fetch wallet balance and restaurant data on component mount
   useEffect(() => {
     fetchWalletBalance();
-  }, []);
+    if (state.restaurantId) {
+      fetchRestaurantData(state.restaurantId);
+    }
+  }, [state.restaurantId]);
 
   const fetchWalletBalance = async () => {
     try {
@@ -78,6 +83,67 @@ const CheckoutScreen: React.FC<CheckoutScreenProps> = ({ onBackPress, onOrderCom
       setWalletError('Unable to load wallet');
     } finally {
       setWalletLoading(false);
+    }
+  };
+
+  const fetchRestaurantData = async (restaurantId: number) => {
+    try {
+      setRestaurantLoading(true);
+      console.log('🏪 Fetching restaurant data for ID:', restaurantId);
+      
+      const response = await restaurantAPI.getRestaurantById(restaurantId);
+      
+      if (response.success && response.data) {
+        console.log('🏪 Restaurant data loaded:', JSON.stringify(response.data, null, 2));
+        console.log('📍 Restaurant coordinates:', { lat: response.data.lat, lng: response.data.lng });
+        
+        setRestaurant(response.data);
+        
+        // If user already selected delivery address, recalculate delivery fee with real restaurant location
+        if (deliveryCoordinates) {
+          calculateDeliveryFee(response.data, deliveryCoordinates);
+        }
+      } else {
+        console.error('❌ Failed to load restaurant data:', response);
+        showError('Restaurant Error', 'Failed to load restaurant information.');
+      }
+    } catch (error: any) {
+      console.error('❌ Error fetching restaurant data:', error);
+      showError('Network Error', 'Failed to load restaurant information. Please check your connection.');
+    } finally {
+      setRestaurantLoading(false);
+    }
+  };
+
+  const calculateDeliveryFee = (restaurantData: Restaurant, customerCoordinates: LocationCoordinates) => {
+    try {
+      // Use real restaurant coordinates from database
+      const restaurantCoordinates: LocationCoordinates = {
+        latitude: restaurantData.lat,
+        longitude: restaurantData.lng,
+      };
+      
+      console.log('📍 DELIVERY FEE CALCULATION:');
+      console.log('🏪 Restaurant Coordinates:', restaurantCoordinates);
+      console.log('🏠 Customer Coordinates:', customerCoordinates);
+      
+      const distance = calculateDistanceKm(restaurantCoordinates, customerCoordinates);
+      const baseFee = 2.50;
+      const perKmFee = 1.00;
+      const calculatedFee = baseFee + (distance * perKmFee);
+      const roundedFee = Math.round(calculatedFee * 100) / 100;
+      
+      console.log('📏 Distance:', distance, 'km');
+      console.log('💰 Base Fee:', baseFee);
+      console.log('💰 Per Km Fee:', perKmFee);
+      console.log('💰 Calculated Fee:', calculatedFee);
+      console.log('💰 Final Delivery Fee:', roundedFee);
+      
+      setDeliveryFeeCalculated(roundedFee);
+    } catch (error) {
+      console.error('❌ Error calculating delivery fee:', error);
+      // Fallback to default fee if calculation fails
+      setDeliveryFeeCalculated(5.00);
     }
   };
 
@@ -204,17 +270,14 @@ const CheckoutScreen: React.FC<CheckoutScreenProps> = ({ onBackPress, onOrderCom
     setDeliveryAddress(address);
     setDeliveryCoordinates(coordinates);
     
-    // Calculate delivery fee based on distance (mock restaurant location)
-    const restaurantCoordinates: LocationCoordinates = {
-      latitude: 9.052232,
-      longitude: 38.115485
-    };
-    
-    const distance = calculateDistanceKm(restaurantCoordinates, coordinates);
-    const baseFee = 2.50;
-    const perKmFee = 1.00;
-    const calculatedFee = baseFee + (distance * perKmFee);
-    setDeliveryFeeCalculated(Math.round(calculatedFee * 100) / 100);
+    // Calculate delivery fee using real restaurant coordinates from database
+    if (restaurant) {
+      calculateDeliveryFee(restaurant, coordinates);
+    } else {
+      console.warn('⚠️ Restaurant data not loaded yet, using fallback delivery fee');
+      // Fallback fee if restaurant data not loaded yet
+      setDeliveryFeeCalculated(5.00);
+    }
   };
 
   const renderOrderSummary = () => (
@@ -261,6 +324,13 @@ const CheckoutScreen: React.FC<CheckoutScreenProps> = ({ onBackPress, onOrderCom
         initialAddress={deliveryAddress}
         onAddressSelect={handleAddressSelect}
         placeholder="Select your delivery address on the map"
+        restaurantLocation={restaurant ? {
+          coordinates: {
+            latitude: restaurant.lat,
+            longitude: restaurant.lng,
+          },
+          name: restaurant.name
+        } : undefined}
       />
       
       {deliveryAddress ? (

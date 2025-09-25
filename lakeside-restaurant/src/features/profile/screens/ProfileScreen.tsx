@@ -11,6 +11,7 @@ import {
 } from 'react-native';
 import { useNavigation } from '@react-navigation/native';
 import { StackNavigationProp } from '@react-navigation/stack';
+import { Ionicons } from '@expo/vector-icons';
 import { ProfileIcon, SettingsIcon } from '../../../shared/components/CustomIcons';
 import { Colors } from '../../../shared/theme/colors';
 import { Typography } from '../../../shared/theme/typography';
@@ -114,6 +115,10 @@ const ProfileScreen: React.FC = () => {
 
   const handleSettings = () => {
     Alert.alert('Settings', 'Settings feature coming soon!');
+  };
+
+  const handleLocationManagement = () => {
+    navigation.navigate('RestaurantLocation');
   };
 
   const handleSupport = () => {
@@ -220,6 +225,14 @@ const ProfileScreen: React.FC = () => {
           <TouchableOpacity style={styles.menuItem} onPress={handleEditProfile}>
             <ProfileIcon size={20} color={Colors.text.secondary} />
             <Text style={styles.menuText}>Edit Profile</Text>
+            <Text style={styles.menuArrow}>›</Text>
+          </TouchableOpacity>
+          
+          <View style={styles.menuDivider} />
+          
+          <TouchableOpacity style={styles.menuItem} onPress={handleLocationManagement}>
+            <Ionicons name="location" size={20} color={Colors.text.secondary} />
+            <Text style={styles.menuText}>Location Management</Text>
             <Text style={styles.menuArrow}>›</Text>
           </TouchableOpacity>
           

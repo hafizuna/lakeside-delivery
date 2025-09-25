@@ -6,6 +6,7 @@ import BottomTabNavigator from './BottomTabNavigator';
 import AddMenuItemScreen from '../features/menu/screens/AddMenuItemScreen';
 import EditMenuItemScreen from '../features/menu/screens/EditMenuItemScreen';
 import ProfileEditScreen from '../features/profile/screens/ProfileEditScreen';
+import RestaurantLocationScreen from '../features/profile/screens/RestaurantLocationScreen';
 
 interface MenuItem {
   id: number;
@@ -39,6 +40,7 @@ export type RootStackParamList = {
   AddMenuItem: undefined;
   EditMenuItem: { item: MenuItem };
   ProfileEdit: { restaurant?: RestaurantProfile };
+  RestaurantLocation: undefined;
 };
 
 const Stack = createStackNavigator<RootStackParamList>();
@@ -68,6 +70,11 @@ const AppNavigator: React.FC = () => {
           name="ProfileEdit" 
           component={ProfileEditScreen}
           options={{ headerShown: true, title: 'Edit Profile' }}
+        />
+        <Stack.Screen 
+          name="RestaurantLocation" 
+          component={RestaurantLocationScreen}
+          options={{ headerShown: true, title: 'Restaurant Location' }}
         />
       </Stack.Navigator>
     </NavigationContainer>

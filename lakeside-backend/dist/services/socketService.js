@@ -30,7 +30,8 @@ class SocketService {
             transports: ['websocket', 'polling'],
             pingTimeout: 60000,
             pingInterval: 25000,
-            origins: process.env.CORS_ORIGINS?.split(',').join(' ') || 'http://localhost:3000 http://192.168.1.5:8081',
+            // Allow all origins for testing (Socket.IO 2.4.1)
+            origins: '*:*'
         });
         // Apply authentication middleware
         this.io.use(socketAuth_1.socketAuthMiddleware);

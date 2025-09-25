@@ -162,7 +162,7 @@ export const getRestaurantProfile = async (req: AuthenticatedRequest, res: Respo
 export const updateRestaurantProfile = async (req: AuthenticatedRequest, res: Response) => {
   try {
     const userId = req.user?.id;
-    const { name, address, description, logoUrl, bannerUrl, status } = req.body;
+    const { name, address, description, logoUrl, bannerUrl, status, lat, lng } = req.body;
 
     if (!userId) {
       return res.status(401).json({
@@ -190,6 +190,8 @@ export const updateRestaurantProfile = async (req: AuthenticatedRequest, res: Re
     if (logoUrl !== undefined) updateData.logoUrl = logoUrl;
     if (bannerUrl !== undefined) updateData.bannerUrl = bannerUrl;
     if (status !== undefined) updateData.status = status;
+    if (lat !== undefined) updateData.lat = lat;
+    if (lng !== undefined) updateData.lng = lng;
 
     const updatedRestaurant = await prisma.restaurant.update({
       where: { id: user.restaurantProfile.id },

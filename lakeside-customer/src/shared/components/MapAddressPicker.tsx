@@ -21,6 +21,43 @@ import { LocationCoordinates } from '../services/locationService';
 
 const { width, height } = Dimensions.get('window');
 
+// Helper function to calculate region that includes both points
+const getRegionForCoordinates = (points: LocationCoordinates[]): Region => {
+  if (points.length === 0) {
+    return {
+      latitude: 9.03,
+      longitude: 38.74,
+      latitudeDelta: 0.01,
+      longitudeDelta: 0.01,
+    };
+  }
+  
+  if (points.length === 1) {
+    return {
+      latitude: points[0].latitude,
+      longitude: points[0].longitude,
+      latitudeDelta: 0.01,
+      longitudeDelta: 0.01,
+    };
+  }
+  
+  // Calculate bounds
+  const minLat = Math.min(...points.map(p => p.latitude));
+  const maxLat = Math.max(...points.map(p => p.latitude));
+  const minLng = Math.min(...points.map(p => p.longitude));
+  const maxLng = Math.max(...points.map(p => p.longitude));
+  
+  const latDelta = (maxLat - minLat) * 1.3; // Add 30% padding
+  const lngDelta = (maxLng - minLng) * 1.3; // Add 30% padding
+  
+  return {
+    latitude: (minLat + maxLat) / 2,
+    longitude: (minLng + maxLng) / 2,
+    latitudeDelta: Math.max(latDelta, 0.005), // Minimum zoom level
+    longitudeDelta: Math.max(lngDelta, 0.005), // Minimum zoom level
+  };
+};
+
 interface SavedAddress {
   id: string;
   label: string;
@@ -35,6 +72,10 @@ interface MapAddressPickerProps {
   initialCoordinates?: LocationCoordinates;
   placeholder?: string;
   showSavedAddresses?: boolean;
+  restaurantLocation?: {
+    coordinates: LocationCoordinates;
+    name: string;
+  };
 }
 
 const MapAddressPicker: React.FC<MapAddressPickerProps> = ({
@@ -43,6 +84,7 @@ const MapAddressPicker: React.FC<MapAddressPickerProps> = ({
   initialCoordinates,
   placeholder = 'Enter delivery address',
   showSavedAddresses = true,
+  restaurantLocation,
 }) => {
   const { 
     state, 
@@ -56,12 +98,15 @@ const MapAddressPicker: React.FC<MapAddressPickerProps> = ({
   const [selectedCoordinates, setSelectedCoordinates] = useState<LocationCoordinates | null>(
     initialCoordinates || null
   );
-  const [mapRegion, setMapRegion] = useState<Region>({
-    latitude: initialCoordinates?.latitude || 9.03,
-    longitude: initialCoordinates?.longitude || 38.74,
-    latitudeDelta: 0.01,
-    longitudeDelta: 0.01,
-  });
+  // Calculate initial region based on available coordinates
+  const getInitialRegion = () => {
+    const points: LocationCoordinates[] = [];
+    if (initialCoordinates) points.push(initialCoordinates);
+    if (restaurantLocation) points.push(restaurantLocation.coordinates);
+    return getRegionForCoordinates(points);
+  };
+  
+  const [mapRegion, setMapRegion] = useState<Region>(getInitialRegion());
   const [markerCoordinate, setMarkerCoordinate] = useState<LocationCoordinates | null>(
     initialCoordinates || null
   );
@@ -96,20 +141,17 @@ const MapAddressPicker: React.FC<MapAddressPickerProps> = ({
           setSelectedAddress(fullAddress);
           setSelectedCoordinates(location);
           setMarkerCoordinate(location);
-          setMapRegion({
-            latitude: location.latitude,
-            longitude: location.longitude,
-            latitudeDelta: 0.01,
-            longitudeDelta: 0.01,
-          });
           
-          // Animate map to location
-          mapRef.current?.animateToRegion({
-            latitude: location.latitude,
-            longitude: location.longitude,
-            latitudeDelta: 0.01,
-            longitudeDelta: 0.01,
-          });
+          // Calculate region to include restaurant if available
+          const points = [location];
+          if (restaurantLocation) {
+            points.push(restaurantLocation.coordinates);
+          }
+          const newRegion = getRegionForCoordinates(points);
+          setMapRegion(newRegion);
+          
+          // Animate map to show both locations
+          mapRef.current?.animateToRegion(newRegion);
         }
       } else {
         Alert.alert(
@@ -136,6 +178,14 @@ const MapAddressPicker: React.FC<MapAddressPickerProps> = ({
         const fullAddress = `${address.address}, ${address.city}, ${address.region}`;
         setSelectedAddress(fullAddress);
         setSelectedCoordinates(coordinate);
+        
+        // If restaurant location exists, adjust map to show both locations
+        if (restaurantLocation) {
+          const points = [coordinate, restaurantLocation.coordinates];
+          const newRegion = getRegionForCoordinates(points);
+          setMapRegion(newRegion);
+          mapRef.current?.animateToRegion(newRegion);
+        }
       }
     } catch (error) {
       console.error('Error reverse geocoding:', error);
@@ -154,19 +204,16 @@ const MapAddressPicker: React.FC<MapAddressPickerProps> = ({
         setSelectedAddress(query);
         setSelectedCoordinates(coordinates);
         setMarkerCoordinate(coordinates);
-        setMapRegion({
-          latitude: coordinates.latitude,
-          longitude: coordinates.longitude,
-          latitudeDelta: 0.01,
-          longitudeDelta: 0.01,
-        });
         
-        mapRef.current?.animateToRegion({
-          latitude: coordinates.latitude,
-          longitude: coordinates.longitude,
-          latitudeDelta: 0.01,
-          longitudeDelta: 0.01,
-        });
+        // Calculate region to include restaurant if available
+        const points = [coordinates];
+        if (restaurantLocation) {
+          points.push(restaurantLocation.coordinates);
+        }
+        const newRegion = getRegionForCoordinates(points);
+        setMapRegion(newRegion);
+        
+        mapRef.current?.animateToRegion(newRegion);
       } else {
         Alert.alert('Address Not Found', 'Could not find the specified address.');
       }
@@ -197,12 +244,15 @@ const MapAddressPicker: React.FC<MapAddressPickerProps> = ({
     setSelectedAddress(address.address);
     setSelectedCoordinates(address.coordinates);
     setMarkerCoordinate(address.coordinates);
-    setMapRegion({
-      latitude: address.coordinates.latitude,
-      longitude: address.coordinates.longitude,
-      latitudeDelta: 0.01,
-      longitudeDelta: 0.01,
-    });
+    
+    // Calculate region to include restaurant if available
+    const points = [address.coordinates];
+    if (restaurantLocation) {
+      points.push(restaurantLocation.coordinates);
+    }
+    const newRegion = getRegionForCoordinates(points);
+    setMapRegion(newRegion);
+    
     setShowSavedAddressList(false);
   };
 
@@ -318,12 +368,30 @@ const MapAddressPicker: React.FC<MapAddressPickerProps> = ({
             showsUserLocation={state.hasLocationPermission}
             showsMyLocationButton={false}
           >
+            {/* Restaurant Location Marker */}
+            {restaurantLocation && (
+              <Marker
+                coordinate={restaurantLocation.coordinates}
+                title={`🏪 ${restaurantLocation.name}`}
+                description="Restaurant Location"
+              >
+                <View style={styles.restaurantMarker}>
+                  <Ionicons name="restaurant" size={20} color={Colors.text.white} />
+                </View>
+              </Marker>
+            )}
+            
+            {/* Delivery Location Marker */}
             {markerCoordinate && (
               <Marker
                 coordinate={markerCoordinate}
-                title="Delivery Location"
+                title="🏠 Delivery Location"
                 description={selectedAddress}
-              />
+              >
+                <View style={styles.deliveryMarker}>
+                  <Ionicons name="location" size={20} color={Colors.text.white} />
+                </View>
+              </Marker>
             )}
           </MapView>
 
@@ -335,6 +403,24 @@ const MapAddressPicker: React.FC<MapAddressPickerProps> = ({
                 {selectedAddress || 'Tap on map to select location'}
               </Text>
             </View>
+            
+            {/* Map Legend */}
+            {restaurantLocation && (
+              <View style={styles.mapLegend}>
+                <View style={styles.legendItem}>
+                  <View style={styles.legendMarkerRed}>
+                    <Ionicons name="restaurant" size={12} color={Colors.text.white} />
+                  </View>
+                  <Text style={styles.legendText}>Restaurant</Text>
+                </View>
+                <View style={styles.legendItem}>
+                  <View style={styles.legendMarkerBlue}>
+                    <Ionicons name="location" size={12} color={Colors.text.white} />
+                  </View>
+                  <Text style={styles.legendText}>Delivery Location</Text>
+                </View>
+              </View>
+            )}
             
             <TouchableOpacity
               style={[
@@ -559,6 +645,70 @@ const styles = StyleSheet.create({
   defaultBadgeText: {
     fontSize: Typography.fontSize.xs,
     color: Colors.text.white,
+    fontWeight: '500',
+  },
+  restaurantMarker: {
+    backgroundColor: Colors.action.error, // Red color for restaurant
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderWidth: 2,
+    borderColor: Colors.text.white,
+    shadowColor: Colors.shadow.dark,
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.3,
+    shadowRadius: 4,
+    elevation: 5,
+  },
+  deliveryMarker: {
+    backgroundColor: Colors.primary.main, // Blue/primary color for delivery
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderWidth: 2,
+    borderColor: Colors.text.white,
+    shadowColor: Colors.shadow.dark,
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.3,
+    shadowRadius: 4,
+    elevation: 5,
+  },
+  mapLegend: {
+    flexDirection: 'row',
+    justifyContent: 'center',
+    marginVertical: Spacing.md,
+    paddingHorizontal: Spacing.md,
+  },
+  legendItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginHorizontal: Spacing.md,
+  },
+  legendMarkerRed: {
+    backgroundColor: Colors.action.error,
+    width: 20,
+    height: 20,
+    borderRadius: 10,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginRight: Spacing.xs,
+  },
+  legendMarkerBlue: {
+    backgroundColor: Colors.primary.main,
+    width: 20,
+    height: 20,
+    borderRadius: 10,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginRight: Spacing.xs,
+  },
+  legendText: {
+    fontSize: Typography.fontSize.xs,
+    color: Colors.text.secondary,
     fontWeight: '500',
   },
 });
