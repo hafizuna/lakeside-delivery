@@ -1348,6 +1348,176 @@ Building the **Restaurant Partner App** for Lakeside Delivery using React Native
 - **Profile Setup**: Restaurant name, address, logo upload, banner image
 - **Business Verification**: Admin approval process for new restaurant partners
 
+### 🆕 **RESTAURANT REGISTRATION SYSTEM - COMPLETE IMPLEMENTATION (September 25, 2025)**
+
+#### **✅ Restaurant Registration & Approval System (100% Complete)**
+
+We've implemented a comprehensive **Restaurant Registration and Approval System** that provides secure onboarding for restaurant partners with mandatory administrative approval before account access.
+
+**Key Features:**
+- ✅ **Secure Registration Process**: Complete `/restaurant/auth/register` endpoint for restaurant partner signup
+- ✅ **Mandatory Approval Workflow**: New restaurants start with `approved: false` status by default
+- ✅ **Login Restriction**: Authentication system blocks unapproved restaurant access with 403 Forbidden
+- ✅ **Restaurant Profile Creation**: Automatic creation of restaurant profile during registration
+- ✅ **Restaurant Wallet Integration**: Automatic wallet record creation for financial tracking
+- ✅ **Field Validation**: Required fields validation for name, phone, and password
+- ✅ **Phone Normalization**: Automatic phone number formatting and validation
+- ✅ **Duplicate Prevention**: Registration blocked if phone number already exists
+
+#### **🔧 Backend Implementation Details**
+
+**Registration Controller:**
+```typescript
+// restaurantRegister controller implementation
+export const restaurantRegister = async (req: Request, res: Response) => {
+  try {
+    const { name, phone, password } = req.body;
+    
+    // Validate required fields
+    if (!name || !phone || !password) {
+      return res.status(400).json({ message: 'Name, phone, and password are required' });
+    }
+    
+    // Normalize phone number
+    const normalizedPhone = normalizePhoneNumber(phone);
+    
+    // Check if user already exists
+    const existingUser = await prisma.user.findUnique({
+      where: { phone: normalizedPhone }
+    });
+    
+    if (existingUser) {
+      return res.status(400).json({ message: 'User with this phone already exists' });
+    }
+    
+    // Hash password
+    const hashedPassword = await bcrypt.hash(password, 10);
+    
+    // Create user with RESTAURANT role
+    const newUser = await prisma.user.create({
+      data: {
+        phone: normalizedPhone,
+        password: hashedPassword,
+        role: 'RESTAURANT',
+        status: 'ACTIVE',
+        restaurantProfile: {
+          create: {
+            name,
+            address: 'Please update your address',
+            description: 'New Restaurant Partner',
+            approved: false, // Requires admin approval
+            isOpen: false,
+            // Other default fields
+          }
+        },
+        restaurantWallet: {
+          create: {
+            balance: 0,
+            // Initialize wallet record
+          }
+        }
+      },
+      include: {
+        restaurantProfile: true
+      }
+    });
+    
+    return res.status(201).json({
+      message: 'Registration successful! Please wait for admin approval before accessing your account.',
+      user: {
+        id: newUser.id,
+        phone: newUser.phone,
+        role: newUser.role,
+        restaurant: {
+          id: newUser.restaurantProfile.id,
+          name: newUser.restaurantProfile.name,
+          approved: newUser.restaurantProfile.approved
+        }
+      }
+    });
+  } catch (error) {
+    console.error('Restaurant registration error:', error);
+    return res.status(500).json({ message: 'Registration failed' });
+  }
+};
+```
+
+**Login Approval Check:**
+```typescript
+// Enhanced restaurantLogin with approval check
+export const restaurantLogin = async (req: Request, res: Response) => {
+  try {
+    // ... existing authentication logic ...
+    
+    // Check if restaurant is approved
+    if (!user.restaurantProfile?.approved) {
+      return res.status(403).json({
+        message: 'Your account is pending admin approval. Please wait for approval before logging in.'
+      });
+    }
+    
+    // Generate token and complete login
+    // ...
+    
+    // Include approval status in response
+    return res.status(200).json({
+      token,
+      user: {
+        // ... user data ...
+        restaurant: {
+          // ... restaurant data ...
+          approved: user.restaurantProfile.approved
+        }
+      }
+    });
+  } catch (error) {
+    // Error handling
+  }
+};
+```
+
+#### **🎯 Approval Workflow**
+
+**Registration Flow:**
+1. **Restaurant Partner Registers** - Provides name, phone, password
+2. **System Creates Profile** - With default `approved: false` status
+3. **Registration Success Message** - Informs user to wait for approval
+4. **Attempted Login Blocked** - 403 Forbidden response until approved
+
+**Admin Approval Flow:**
+1. **Admin Reviews Application** - In admin dashboard
+2. **Verification Process** - Reviews restaurant details
+3. **Status Update** - Admin changes `approved: false` → `approved: true`
+4. **Restaurant Notified** - Notification sent about approval
+5. **Login Enabled** - Restaurant can now login and access dashboard
+
+#### **💼 Business Impact**
+
+**For Restaurant Partners:**
+- **Clear Expectations** - Transparent approval process
+- **Secure Onboarding** - Professional registration experience
+- **Status Awareness** - Clear messaging about approval status
+- **Account Security** - Prevention of unauthorized access
+
+**For Platform Administrators:**
+- **Quality Control** - Verify restaurant details before activation
+- **Risk Management** - Prevent unauthorized or fraudulent accounts
+- **Streamlined Process** - Systematic approach to partner onboarding
+- **Partner Curation** - Maintain high-quality restaurant network
+
+**For System Architecture:**
+- **Database Integrity** - Proper relationship between user and restaurant
+- **Security Enhancement** - Access control based on approval status
+- **API Consistency** - Aligned with customer authentication patterns
+- **Scalable Design** - Ready for additional registration workflow steps
+
+#### **🔄 Integration with Customer Experience**
+
+- **Quality Assurance** - Only approved restaurants visible to customers
+- **Platform Reliability** - All visible restaurants properly vetted
+- **Brand Protection** - Maintains platform reputation and standards
+- **Operational Efficiency** - Prevents customer exposure to incomplete restaurant profiles
+
 #### **2. Restaurant Dashboard** 📊
 - **Business Overview**: Today's orders, revenue, order statistics
 - **Order Status Summary**: Pending, preparing, ready for pickup counts
