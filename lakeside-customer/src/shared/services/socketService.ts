@@ -75,7 +75,7 @@ class SocketService {
       console.log('🔌 Connecting to Socket.IO server...');
 
       // Create Socket.IO connection (2.4.0 compatible)
-      const socketUrl = 'http://192.168.1.4:3001';
+      const socketUrl = 'http://192.168.1.5:3001';
       console.log(`🔌 Attempting connection to: ${socketUrl}`);
       
       this.socket = io(socketUrl, {
