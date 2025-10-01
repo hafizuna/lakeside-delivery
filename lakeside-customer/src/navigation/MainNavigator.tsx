@@ -47,8 +47,8 @@ export const MainNavigator: React.FC = () => {
   };
 
   const handleOrderComplete = () => {
-    setCurrentScreen('home');
-    setActiveTab('Home');
+    setCurrentScreen('orders');
+    setActiveTab('Orders');
   };
 
   const handleRestaurantPress = (restaurant: Restaurant) => {
@@ -83,6 +83,14 @@ export const MainNavigator: React.FC = () => {
           <CheckoutScreen 
             onBackPress={() => setCurrentScreen('cart')} 
             onOrderComplete={handleOrderComplete}
+            navigation={{
+              navigate: (screen: string, params?: any) => {
+                if (screen === 'Orders') {
+                  setActiveTab('Orders');
+                  setCurrentScreen('orders');
+                }
+              }
+            }}
           />
         );
       case 'orders':

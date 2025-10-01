@@ -51,6 +51,9 @@ model Driver {
   ratings             Rating[]             @relation("DriverRatings")
   supportTickets      SupportTicket[]
   walletTransactions  WalletTransaction[]
+  // HYBRID SYSTEM: Driver assignment relationships
+  driverAssignments   DriverAssignment[]
+  driverState         DriverState?
 
   @@map("drivers")
 }
@@ -147,6 +150,13 @@ model Order {
   preparingAt           DateTime?       @map("preparing_at")
   pickedUpAt            DateTime?       @map("picked_up_at")
   deliveredAt           DateTime?       @map("delivered_at")
+  // HYBRID SYSTEM: Enhanced tracking fields
+  driverAssignedAt      DateTime?       @map("driver_assigned_at")
+  readyAt               DateTime?       @map("ready_at")
+  driverArrivedAt       DateTime?       @map("driver_arrived_at")
+  cancelledBy           CancelledBy?    @map("cancelled_by")
+  cancelReason          CancelReason?   @map("cancel_reason")
+  driverCancelReason    DriverCancelReason? @map("driver_cancel_reason")
   orderRating           Float?          @default(0) @map("order_rating")
   itemsSubtotal         Decimal         @default(0.00) @map("items_subtotal") @db.Decimal(10, 2)
   deliveryCommission    Decimal         @default(0.00) @map("delivery_commission") @db.Decimal(10, 2)
@@ -159,6 +169,8 @@ model Order {
   restaurant            Restaurant      @relation(fields: [restaurantId], references: [id])
   ratings               Rating[]        @relation("OrderRatings")
   supportTickets        SupportTicket[]
+  // HYBRID SYSTEM: Driver assignment relationships
+  driverAssignments     DriverAssignment[]
 
   @@index([customerId], map: "orders_customer_id_fkey")
   @@index([driverId], map: "orders_driver_id_fkey")
@@ -281,6 +293,8 @@ model GeofenceZone {
   status             GeofenceStatus    @default(ACTIVE)
   deliveryFeeRules   DeliveryFeeRule[]
   restaurants        Restaurant[]
+  // HYBRID SYSTEM: Driver state relationships
+  driverStates       DriverState[]
 
   @@map("geofencing")
 }
@@ -360,6 +374,59 @@ model Rating {
   @@index([orderId], map: "ratings_order_id_fkey")
   @@index([restaurantId], map: "ratings_restaurant_id_fkey")
   @@map("ratings")
+}
+
+// =====================================================
+// HYBRID DRIVER ASSIGNMENT SYSTEM - NEW MODELS
+// =====================================================
+
+model DriverAssignment {
+  id          String                    @id @default(cuid()) @map("assignment_id")
+  orderId     Int                       @map("order_id")
+  driverId    Int                       @map("driver_id")
+  status      DriverAssignmentStatus    @default(OFFERED)
+  wave        Int                       @default(1)
+  offeredAt   DateTime                  @default(now()) @map("offered_at")
+  respondedAt DateTime?                 @map("responded_at")
+  acceptedAt  DateTime?                 @map("accepted_at")
+  expiresAt   DateTime?                 @map("expires_at")
+  reason      String?                   @db.VarChar(191)
+  createdAt   DateTime                  @default(now()) @map("created_at")
+  updatedAt   DateTime                  @updatedAt @map("updated_at")
+  
+  // Relationships
+  order       Order                     @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  driver      Driver                    @relation(fields: [driverId], references: [id], onDelete: Cascade)
+  
+  // Indexes for performance
+  @@index([orderId], map: "driver_assignments_order_id_fkey")
+  @@index([driverId], map: "driver_assignments_driver_id_fkey")
+  @@index([status, expiresAt], map: "driver_assignments_status_expires_idx")
+  @@index([wave, offeredAt], map: "driver_assignments_wave_offered_idx")
+  @@map("driver_assignments")
+}
+
+model DriverState {
+  driverId                  Int           @id @map("driver_id")
+  isOnline                  Boolean       @default(false) @map("is_online")
+  activeAssignmentsCount    Int           @default(0) @map("active_assignments_count")
+  maxConcurrentAssignments  Int           @default(1) @map("max_concurrent_assignments")
+  currentZoneId             Int?          @map("current_zone_id")
+  lastHeartbeatAt           DateTime?     @map("last_heartbeat_at")
+  onlineSince               DateTime?     @map("online_since")
+  lastLocationUpdate        DateTime?     @map("last_location_update")
+  createdAt                 DateTime      @default(now()) @map("created_at")
+  updatedAt                 DateTime      @updatedAt @map("updated_at")
+  
+  // Relationships
+  driver                    Driver        @relation(fields: [driverId], references: [id], onDelete: Cascade)
+  currentZone               GeofenceZone? @relation(fields: [currentZoneId], references: [id])
+  
+  // Indexes for performance
+  @@index([isOnline, activeAssignmentsCount], map: "driver_state_availability_idx")
+  @@index([currentZoneId], map: "driver_state_zone_id_fkey")
+  @@index([lastHeartbeatAt], map: "driver_state_heartbeat_idx")
+  @@map("driver_state")
 }
 
 enum UserRole {
@@ -477,4 +544,42 @@ enum RatingType {
   RESTAURANT
   ORDER
   DRIVER
+}
+
+// =====================================================
+// HYBRID DRIVER ASSIGNMENT SYSTEM - NEW ENUMS
+// =====================================================
+
+enum DriverAssignmentStatus {
+  OFFERED
+  ACCEPTED
+  DECLINED
+  EXPIRED
+  CANCELLED
+  COMPLETED
+}
+
+enum CancelledBy {
+  CUSTOMER
+  RESTAURANT
+  DRIVER
+  SYSTEM
+}
+
+enum CancelReason {
+  CUSTOMER_CHANGED_MIND
+  OUT_OF_STOCK
+  NO_DRIVER_FOUND
+  RESTAURANT_TIMEOUT
+  ADDRESS_ISSUE
+  DRIVER_CANCEL_PREP
+  DRIVER_EMERGENCY
+}
+
+enum DriverCancelReason {
+  VEHICLE_ISSUE
+  EMERGENCY
+  LONG_WAIT
+  WRONG_ADDRESS
+  RESTAURANT_DELAY
 }

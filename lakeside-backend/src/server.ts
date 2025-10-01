@@ -16,6 +16,7 @@ import restaurantManagementRoutes from "./routes/restaurantManagement";
 import orderRoutes from "./routes/order";
 import walletRoutes from "./routes/wallet";
 import driverRoutes from "./routes/driver";
+import driverAssignmentRoutes from "./routes/driverAssignments";
 import ratingRoutes from "./routes/rating";
 import escrowOrderRoutes from "./routes/escrowOrderRoutes";
 
@@ -41,6 +42,7 @@ app.use("/api/restaurant", restaurantManagementRoutes);
 app.use("/api/orders", orderRoutes);
 app.use("/api/wallet", walletRoutes);
 app.use("/api/driver", driverRoutes);
+app.use("/api/driver/assignments", driverAssignmentRoutes);
 app.use("/api/ratings", ratingRoutes);
 app.use("/api/escrow-orders", escrowOrderRoutes);
 
@@ -80,6 +82,10 @@ app.use(
 
 // Initialize Socket.IO
 socketService.initialize(httpServer);
+
+// Initialize automated maintenance service
+import maintenanceService from "./services/maintenanceService";
+maintenanceService.startAutomatedMaintenance();
 
 // Start server
 httpServer.listen(Number(PORT), "0.0.0.0", () => {

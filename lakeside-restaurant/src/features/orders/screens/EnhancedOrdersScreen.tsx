@@ -8,6 +8,7 @@ import {
   Alert,
   RefreshControl,
   Image,
+  ActivityIndicator,
 } from 'react-native';
 import { useNavigation } from '@react-navigation/native';
 import { StackNavigationProp } from '@react-navigation/stack';
@@ -79,6 +80,50 @@ const EnhancedOrdersScreen: React.FC = () => {
   const [mainTab, setMainTab] = useState<MainTab>('ACTIVE');
   const [activeSubTab, setActiveSubTab] = useState<ActiveTab>('PENDING');
   const [historySubTab, setHistorySubTab] = useState<HistoryTab>('DELIVERED');
+  
+  // Grace period state for countdown updates
+  const [gracePeriodTick, setGracePeriodTick] = useState(0);
+  
+  // Grace period calculation function
+  const getGracePeriodInfo = (order: Order) => {
+    if (order.status !== 'PENDING') {
+      return { isInGracePeriod: false, remainingTime: '0:00', actionsDisabled: false };
+    }
+    
+    const now = new Date().getTime();
+    const created = new Date(order.createdAt).getTime();
+    const elapsedMs = now - created;
+    const remainingMs = Math.max(0, 60000 - elapsedMs); // 1 minute
+    const isInGracePeriod = remainingMs > 0;
+    
+    const remainingSeconds = Math.ceil(remainingMs / 1000);
+    const minutes = Math.floor(remainingSeconds / 60);
+    const seconds = remainingSeconds % 60;
+    const remainingTime = `${minutes}:${seconds.toString().padStart(2, '0')}`;
+    
+    return {
+      isInGracePeriod,
+      remainingTime,
+      actionsDisabled: isInGracePeriod
+    };
+  };
+  
+  // Update grace period every second for PENDING orders
+  useEffect(() => {
+    const pendingOrders = orders.filter(order => order.status === 'PENDING');
+    const hasActiveGracePeriods = pendingOrders.some(order => getGracePeriodInfo(order).isInGracePeriod);
+    
+    let interval: NodeJS.Timeout | null = null;
+    if (hasActiveGracePeriods) {
+      interval = setInterval(() => {
+        setGracePeriodTick(prev => prev + 1);
+      }, 1000);
+    }
+    
+    return () => {
+      if (interval) clearInterval(interval);
+    };
+  }, [orders, gracePeriodTick]);
 
   const onRefresh = async () => {
     await refreshOrders();
@@ -246,6 +291,7 @@ const EnhancedOrdersScreen: React.FC = () => {
   const renderOrderCard = (order: Order) => {
     const foodTotal = getFoodTotal(order);
     const isActiveOrder = ['PENDING', 'ACCEPTED', 'PREPARING', 'READY'].includes(order.status);
+    const gracePeriodInfo = getGracePeriodInfo(order);
 
     return (
       <TouchableOpacity 
@@ -294,7 +340,27 @@ const EnhancedOrdersScreen: React.FC = () => {
               <Text style={styles.statusIndicatorText}>Cooking</Text>
             </View>
           )}
+          {order.status === 'PENDING' && (
+            <View style={styles.statusIndicator}>
+              <Text style={styles.statusIndicatorText}>New Request</Text>
+            </View>
+          )}
         </View>
+
+        {/* Grace Period Notice - positioned under New Request */}
+        {order.status === 'PENDING' && gracePeriodInfo.isInGracePeriod && (
+          <View style={styles.gracePeriodNotice}>
+            <View style={styles.gracePeriodRow}>
+              <ActivityIndicator size="small" color={Colors.warning.main} />
+              <Text style={styles.gracePeriodText}>
+                Giving customer 1 minute to cancel if order is by mistake
+              </Text>
+            </View>
+            <Text style={styles.gracePeriodCountdown}>
+              Time remaining: {gracePeriodInfo.remainingTime}
+            </Text>
+          </View>
+        )}
 
         {/* Action buttons only for active orders */}
         {isActiveOrder && (
@@ -302,22 +368,38 @@ const EnhancedOrdersScreen: React.FC = () => {
             {order.status === 'PENDING' && (
               <>
                 <TouchableOpacity
-                  style={[styles.actionButton, styles.rejectButton]}
+                  style={[
+                    styles.actionButton, 
+                    gracePeriodInfo.actionsDisabled ? styles.disabledButton : styles.rejectButton
+                  ]}
                   onPress={(e) => {
                     e.stopPropagation();
-                    rejectOrder(order.id);
+                    if (!gracePeriodInfo.actionsDisabled) {
+                      rejectOrder(order.id);
+                    }
                   }}
+                  disabled={gracePeriodInfo.actionsDisabled}
                 >
-                  <Text style={styles.rejectButtonText}>Reject</Text>
+                  <Text style={[
+                    gracePeriodInfo.actionsDisabled ? styles.disabledButtonText : styles.rejectButtonText
+                  ]}>Reject</Text>
                 </TouchableOpacity>
                 <TouchableOpacity
-                  style={[styles.actionButton, { backgroundColor: Colors.success.main }]}
+                  style={[
+                    styles.actionButton, 
+                    gracePeriodInfo.actionsDisabled ? styles.disabledButton : { backgroundColor: Colors.success.main }
+                  ]}
                   onPress={(e) => {
                     e.stopPropagation();
-                    acceptOrder(order.id);
+                    if (!gracePeriodInfo.actionsDisabled) {
+                      acceptOrder(order.id);
+                    }
                   }}
+                  disabled={gracePeriodInfo.actionsDisabled}
                 >
-                  <Text style={styles.actionButtonText}>Accept</Text>
+                  <Text style={[
+                    gracePeriodInfo.actionsDisabled ? styles.disabledButtonText : styles.actionButtonText
+                  ]}>Accept</Text>
                 </TouchableOpacity>
               </>
             )}
@@ -788,6 +870,14 @@ const styles = StyleSheet.create({
     fontSize: Typography.fontSize.sm,
     fontWeight: Typography.fontWeight.medium,
   },
+  disabledButton: {
+    backgroundColor: Colors.text.disabled,
+  },
+  disabledButtonText: {
+    color: Colors.text.secondary,
+    fontSize: Typography.fontSize.sm,
+    fontWeight: Typography.fontWeight.medium,
+  },
   waitingIndicator: {
     flex: 1,
     alignItems: 'center',
@@ -810,6 +900,33 @@ const styles = StyleSheet.create({
     fontSize: Typography.fontSize.xs,
     color: Colors.text.tertiary,
     marginLeft: Spacing.xs,
+  },
+  gracePeriodNotice: {
+    backgroundColor: Colors.warning.light,
+    borderColor: Colors.warning.main,
+    borderWidth: 1,
+    borderRadius: 8,
+    padding: Spacing.sm,
+    marginTop: Spacing.sm,
+    marginBottom: Spacing.xs,
+  },
+  gracePeriodRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: Spacing.xs,
+  },
+  gracePeriodText: {
+    marginLeft: Spacing.xs,
+    fontSize: Typography.fontSize.sm,
+    color: Colors.warning.dark,
+    fontWeight: Typography.fontWeight.medium,
+    flex: 1,
+  },
+  gracePeriodCountdown: {
+    fontSize: Typography.fontSize.xs,
+    color: Colors.warning.dark,
+    fontWeight: Typography.fontWeight.semiBold,
+    textAlign: 'center',
   },
   emptyState: {
     flex: 1,

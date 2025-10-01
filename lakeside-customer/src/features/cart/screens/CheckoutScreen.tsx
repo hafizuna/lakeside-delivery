@@ -16,6 +16,7 @@ import { useCart } from '../context/CartContext';
 import { orderAPI, walletAPI, restaurantAPI, Restaurant } from '../../../shared/services/api';
 import { PaymentMethod } from '../../../shared/types/Order';
 import { useToast } from '../../../shared/context/ToastContext';
+import OrderSuccessModal from '../../../shared/components/OrderSuccessModal';
 import { useLocation } from '../../../shared/context/LocationContext';
 import { LocationCoordinates } from '../../../shared/services/locationService';
 import { useNavigation } from '@react-navigation/native';
@@ -57,6 +58,8 @@ const CheckoutScreen: React.FC<CheckoutScreenProps> = ({ onBackPress, onOrderCom
   const [deliveryFeeCalculated, setDeliveryFeeCalculated] = useState<number>(5.00);
   const [restaurant, setRestaurant] = useState<Restaurant | null>(null);
   const [restaurantLoading, setRestaurantLoading] = useState(false);
+  const [showSuccessModal, setShowSuccessModal] = useState(false);
+  const [successOrderId, setSuccessOrderId] = useState<number | null>(null);
 
   // Fetch wallet balance and restaurant data on component mount
   useEffect(() => {
@@ -230,16 +233,9 @@ const CheckoutScreen: React.FC<CheckoutScreenProps> = ({ onBackPress, onOrderCom
         // Clear cart immediately
         clearCart();
         
-        // Show success toast
-        showSuccess(
-          'Order Placed Successfully! 🎉', 
-          `Order #${response.data.id} is being prepared. Track your order in the Orders tab.`
-        );
-        
-        // Navigate to orders after a brief delay to let user see the toast
-        setTimeout(() => {
-          onOrderComplete();
-        }, 1500);
+        // Show success modal with order ID
+        setSuccessOrderId(response.data.id);
+        setShowSuccessModal(true);
       } else {
         throw new Error('Failed to create order');
       }
@@ -461,6 +457,18 @@ const CheckoutScreen: React.FC<CheckoutScreenProps> = ({ onBackPress, onOrderCom
           </View>
         </TouchableOpacity>
       </View>
+
+      {/* Success Modal */}
+      <OrderSuccessModal
+        visible={showSuccessModal}
+        orderId={successOrderId || 0}
+        onClose={() => {
+          setShowSuccessModal(false);
+          setSuccessOrderId(null);
+          onOrderComplete();
+        }}
+        autoCloseDelay={8000}
+      />
     </View>
   );
 };

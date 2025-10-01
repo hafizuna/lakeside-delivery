@@ -69,6 +69,14 @@ declare class SocketService {
      * Force disconnect all sockets for a user (useful for logout)
      */
     disconnectUser(userId: number): void;
+    /**
+     * Emit specific event to a driver (for hybrid assignment system)
+     */
+    emitToDriver(driverId: number, eventName: string, data: any): void;
+    /**
+     * Emit driver assignment status change
+     */
+    emitDriverAssignmentUpdate(driverId: number, assignmentData: any): void;
 }
 declare const _default: SocketService;
 export default _default;

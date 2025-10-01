@@ -14,8 +14,8 @@ declare class RestaurantWalletServiceImpl implements RestaurantWalletService {
         data: {
             wallet: {
                 createdAt: Date;
-                restaurantId: number;
                 updatedAt: Date;
+                restaurantId: number;
                 balance: Prisma.Decimal;
                 isActive: boolean;
                 totalEarnings: Prisma.Decimal;
@@ -49,8 +49,8 @@ declare class RestaurantWalletServiceImpl implements RestaurantWalletService {
         data: {
             wallet: {
                 createdAt: Date;
-                restaurantId: number;
                 updatedAt: Date;
+                restaurantId: number;
                 balance: Prisma.Decimal;
                 isActive: boolean;
                 totalEarnings: Prisma.Decimal;
@@ -61,10 +61,10 @@ declare class RestaurantWalletServiceImpl implements RestaurantWalletService {
             transaction: {
                 type: import(".prisma/client").$Enums.WalletTransactionType;
                 id: number;
-                status: import(".prisma/client").$Enums.WalletTransactionStatus;
+                driverId: number | null;
                 createdAt: Date;
                 customerId: number | null;
-                driverId: number | null;
+                status: import(".prisma/client").$Enums.WalletTransactionStatus;
                 description: string | null;
                 adminId: number | null;
                 amount: Prisma.Decimal;
@@ -95,8 +95,8 @@ declare class RestaurantWalletServiceImpl implements RestaurantWalletService {
             totalPayouts: number;
             wallet: {
                 createdAt: Date;
-                restaurantId: number;
                 updatedAt: Date;
+                restaurantId: number;
                 balance: Prisma.Decimal;
                 isActive: boolean;
                 totalEarnings: Prisma.Decimal;
@@ -125,8 +125,8 @@ declare class RestaurantWalletServiceImpl implements RestaurantWalletService {
             totalPayouts: number;
             wallet: {
                 createdAt: Date;
-                restaurantId: number;
                 updatedAt: Date;
+                restaurantId: number;
                 balance: Prisma.Decimal;
                 isActive: boolean;
                 totalEarnings: Prisma.Decimal;
@@ -152,8 +152,8 @@ declare class RestaurantWalletServiceImpl implements RestaurantWalletService {
                 totalPayouts: number;
                 wallet: {
                     createdAt: Date;
-                    restaurantId: number;
                     updatedAt: Date;
+                    restaurantId: number;
                     balance: Prisma.Decimal;
                     isActive: boolean;
                     totalEarnings: Prisma.Decimal;
@@ -166,10 +166,10 @@ declare class RestaurantWalletServiceImpl implements RestaurantWalletService {
                 amount: number;
                 type: import(".prisma/client").$Enums.WalletTransactionType;
                 id: number;
-                status: import(".prisma/client").$Enums.WalletTransactionStatus;
+                driverId: number | null;
                 createdAt: Date;
                 customerId: number | null;
-                driverId: number | null;
+                status: import(".prisma/client").$Enums.WalletTransactionStatus;
                 description: string | null;
                 adminId: number | null;
                 screenshotUrl: string | null;

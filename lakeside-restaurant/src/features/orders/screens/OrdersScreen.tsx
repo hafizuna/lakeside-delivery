@@ -8,6 +8,7 @@ import {
   Alert,
   RefreshControl,
   Image,
+  ActivityIndicator,
 } from 'react-native';
 import { useNavigation } from '@react-navigation/native';
 import { StackNavigationProp } from '@react-navigation/stack';
@@ -18,6 +19,7 @@ import { Typography } from '../../../shared/theme/typography';
 import { Spacing } from '../../../shared/theme/spacing';
 import { RootStackParamList } from '../../../navigation/AppNavigator';
 import { useOrders } from '../context/OrdersContext';
+import { useOrdersGracePeriodStatus } from '../../../shared/hooks/useGracePeriodCountdown';
 
 // Order status enum matching backend Prisma schema
 type OrderStatus = 'PENDING' | 'ACCEPTED' | 'PREPARING' | 'READY' | 'PICKED_UP' | 'DELIVERING' | 'DELIVERED' | 'CANCELLED';
@@ -68,9 +70,14 @@ const OrdersScreen: React.FC = () => {
     loading, 
     refreshing, 
     refreshOrders, 
-    updateOrderStatus 
+    updateOrderStatus,
+    canAcceptOrder,
+    canRejectOrder 
   } = useOrders();
   const [selectedStatus, setSelectedStatus] = useState<OrderStatus | 'ALL'>('ALL');
+  
+  // Track grace period status for all orders
+  const ordersGracePeriodStatus = useOrdersGracePeriodStatus(orders);
 
   const onRefresh = async () => {
     await refreshOrders();
@@ -219,7 +226,28 @@ const OrdersScreen: React.FC = () => {
     navigation.navigate('OrderDetail', { orderId });
   };
 
-  const renderOrderCard = (order: Order) => (
+  const renderOrderCard = (order: Order) => {
+    // Simple manual grace period calculation
+    const isInGracePeriod = () => {
+      if (order.status !== 'PENDING') return false;
+      const now = new Date().getTime();
+      const created = new Date(order.createdAt).getTime();
+      const elapsedMs = now - created;
+      return elapsedMs < 60000; // 1 minute = 60000ms
+    };
+    
+    const gracePeriodActive = isInGracePeriod();
+    const gracePeriodInfo = ordersGracePeriodStatus[order.id];
+    const canAccept = canAcceptOrder(order.id);
+    const canReject = canRejectOrder(order.id);
+    
+    // One-time debug for PENDING orders
+    if (order.status === 'PENDING') {
+      console.log(`Order ${order.id}: gracePeriodActive=${gracePeriodActive}, canAccept=${canAccept}, disabled=${gracePeriodActive || !canAccept}`);
+    }
+    
+    
+    return (
     <TouchableOpacity 
       key={order.id} 
       style={styles.orderCard}
@@ -311,20 +339,51 @@ const OrdersScreen: React.FC = () => {
         )}
       </View>
 
+      {/* Grace Period Notice - Only show if in grace period */}
+      {order.status === 'PENDING' && gracePeriodActive && (
+        <View style={styles.gracePeriodNotice}>
+          <View style={styles.gracePeriodRow}>
+            <ActivityIndicator size="small" color={Colors.warning.main} />
+            <Text style={styles.gracePeriodMainText}>
+              Giving customer 1 minute to cancel if order is by mistake
+            </Text>
+          </View>
+          <Text style={styles.gracePeriodCountdownText}>
+            Time remaining: {gracePeriodInfo?.formattedTime || 'Calculating...'}
+          </Text>
+        </View>
+      )}
+
       <View style={styles.actionButtons}>
         {order.status === 'PENDING' && (
           <>
             <TouchableOpacity
-              style={[styles.actionButton, styles.rejectButton]}
+              style={[
+                styles.actionButton, 
+                styles.rejectButton,
+                (gracePeriodActive || !canReject) && styles.disabledButton
+              ]}
               onPress={() => rejectOrder(order.id)}
+              disabled={gracePeriodActive || !canReject}
             >
-              <Text style={styles.rejectButtonText}>Reject</Text>
+              <Text style={[
+                styles.rejectButtonText, 
+                (gracePeriodActive || !canReject) && styles.disabledButtonText
+              ]}>Reject</Text>
             </TouchableOpacity>
             <TouchableOpacity
-              style={[styles.actionButton, { backgroundColor: Colors.success.main }]}
+              style={[
+                styles.actionButton, 
+                { backgroundColor: Colors.success.main },
+                (gracePeriodActive || !canAccept) && styles.disabledButton
+              ]}
               onPress={() => acceptOrder(order.id)}
+              disabled={gracePeriodActive || !canAccept}
             >
-              <Text style={styles.actionButtonText}>Accept</Text>
+              <Text style={[
+                styles.actionButtonText, 
+                (gracePeriodActive || !canAccept) && styles.disabledButtonText
+              ]}>Accept</Text>
             </TouchableOpacity>
           </>
         )}
@@ -353,7 +412,8 @@ const OrdersScreen: React.FC = () => {
         <Text style={styles.tapIndicatorText}>Tap to view details</Text>
       </View>
     </TouchableOpacity>
-  );
+    );
+  };
 
   return (
     <View style={styles.container}>
@@ -825,6 +885,42 @@ const styles = StyleSheet.create({
     fontSize: Typography.fontSize.xs,
     color: Colors.text.tertiary,
     marginLeft: Spacing.xs,
+  },
+  // Grace period styles
+  gracePeriodNotice: {
+    backgroundColor: Colors.warning.light,
+    paddingHorizontal: Spacing.md,
+    paddingVertical: Spacing.sm,
+    marginBottom: Spacing.sm,
+    borderRadius: 6,
+    borderLeftWidth: 3,
+    borderLeftColor: Colors.warning.main,
+  },
+  gracePeriodRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: Spacing.xs,
+  },
+  gracePeriodMainText: {
+    fontSize: Typography.fontSize.sm,
+    color: Colors.warning.dark,
+    marginLeft: Spacing.sm,
+    flex: 1,
+    lineHeight: 18,
+  },
+  gracePeriodCountdownText: {
+    fontSize: Typography.fontSize.sm,
+    fontWeight: Typography.fontWeight.semiBold,
+    color: Colors.warning.dark,
+    textAlign: 'center',
+  },
+  disabledButton: {
+    backgroundColor: Colors.text.disabled,
+    opacity: 0.5,
+  },
+  disabledButtonText: {
+    color: Colors.text.disabled,
+    opacity: 0.7,
   },
 });
 

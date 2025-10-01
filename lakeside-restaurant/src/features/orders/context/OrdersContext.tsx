@@ -1,6 +1,7 @@
 import React, { createContext, useContext, useState, useEffect, ReactNode } from 'react';
 import { apiService } from '../../../shared/services/api';
 import { useAuth } from '../../auth/context/AuthContext';
+import { shouldDisableRestaurantActions, getGracePeriodDisplayInfo } from '../../../shared/utils/gracePeriodUtils';
 
 interface OrderItem {
   id: number;
@@ -51,6 +52,11 @@ interface OrdersContextType {
     totalRevenue: number;
     averageOrderValue: number;
   };
+  // Grace period functions
+  canAcceptOrder: (orderId: number) => boolean;
+  canRejectOrder: (orderId: number) => boolean;
+  getOrderGracePeriodInfo: (orderId: number) => any;
+  isOrderInGracePeriod: (orderId: number) => boolean;
 }
 
 const OrdersContext = createContext<OrdersContextType | undefined>(undefined);
@@ -103,6 +109,18 @@ export const OrdersProvider: React.FC<OrdersProviderProps> = ({ children }) => {
 
   const acceptOrder = async (orderId: number): Promise<boolean> => {
     try {
+      // Check if order is in grace period before accepting
+      const order = orders.find(o => o.id === orderId);
+      if (!order) {
+        console.error('Order not found:', orderId);
+        return false;
+      }
+
+      if (shouldDisableRestaurantActions(order.createdAt, order.status, order.acceptedAt)) {
+        console.warn('Cannot accept order during grace period:', orderId);
+        return false;
+      }
+
       const response = await apiService.acceptOrder(orderId);
       
       if (response.success) {
@@ -124,6 +142,21 @@ export const OrdersProvider: React.FC<OrdersProviderProps> = ({ children }) => {
 
   const updateOrderStatus = async (orderId: number, status: string): Promise<boolean> => {
     try {
+      // Check if order is in grace period before updating status
+      const order = orders.find(o => o.id === orderId);
+      if (!order) {
+        console.error('Order not found:', orderId);
+        return false;
+      }
+
+      // Prevent status changes during grace period for PENDING orders (accept/reject actions)
+      if (order.status === 'PENDING' && (status === 'ACCEPTED' || status === 'CANCELLED')) {
+        if (shouldDisableRestaurantActions(order.createdAt, order.status, order.acceptedAt)) {
+          console.warn('Cannot update order status during grace period:', orderId, status);
+          return false;
+        }
+      }
+
       const response = await apiService.updateOrderStatus(orderId, status);
       
       if (response.success) {
@@ -164,6 +197,32 @@ export const OrdersProvider: React.FC<OrdersProviderProps> = ({ children }) => {
     };
   };
 
+  // Grace period helper functions
+  const canAcceptOrder = (orderId: number): boolean => {
+    const order = orders.find(o => o.id === orderId);
+    if (!order || order.status !== 'PENDING') return false;
+    return !shouldDisableRestaurantActions(order.createdAt, order.status, order.acceptedAt);
+  };
+
+  const canRejectOrder = (orderId: number): boolean => {
+    const order = orders.find(o => o.id === orderId);
+    if (!order || order.status !== 'PENDING') return false;
+    return !shouldDisableRestaurantActions(order.createdAt, order.status, order.acceptedAt);
+  };
+
+  const getOrderGracePeriodInfo = (orderId: number) => {
+    const order = orders.find(o => o.id === orderId);
+    if (!order) return null;
+    return getGracePeriodDisplayInfo(order.createdAt, order.status);
+  };
+
+  const isOrderInGracePeriod = (orderId: number): boolean => {
+    const order = orders.find(o => o.id === orderId);
+    if (!order) return false;
+    const gracePeriodInfo = getGracePeriodDisplayInfo(order.createdAt, order.status);
+    return gracePeriodInfo.isInGracePeriod && order.status === 'PENDING';
+  };
+
   const value: OrdersContextType = {
     orders,
     loading,
@@ -174,6 +233,10 @@ export const OrdersProvider: React.FC<OrdersProviderProps> = ({ children }) => {
     updateOrderStatus,
     getOrdersByStatus,
     getTodayStats,
+    canAcceptOrder,
+    canRejectOrder,
+    getOrderGracePeriodInfo,
+    isOrderInGracePeriod,
   };
 
   return (

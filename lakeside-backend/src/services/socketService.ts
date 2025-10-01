@@ -316,6 +316,58 @@ class SocketService {
 
     console.log(`🔌 Disconnected ${disconnectedCount} sockets for user ${userId}`);
   }
+
+  /**
+   * Emit specific event to a driver (for hybrid assignment system)
+   */
+  public emitToDriver(driverId: number, eventName: string, data: any): void {
+    if (!this.io) {
+      console.warn('🔌 [SOCKET-SERVICE] Socket not initialized, cannot emit to driver');
+      return;
+    }
+
+    console.log(`🔊 [SOCKET-SERVICE] Attempting to emit event '${eventName}' to driver ${driverId}`);
+    
+    const driverRoom = SocketRooms.user(driverId);
+    console.log(`💬 [SOCKET-SERVICE] Driver room: ${driverRoom}`);
+    
+    // Check socket connection status
+    console.log(`📡 [SOCKET-SERVICE] Attempting to emit to room: ${driverRoom}`);
+    console.log(`🔍 [SOCKET-SERVICE] Socket.IO server has ${Object.keys(this.io.sockets.sockets).length} total connected sockets`);
+    
+    // Get connection stats
+    const stats = this.getConnectionStats();
+    console.log(`📊 [SOCKET-SERVICE] Connection stats: ${stats.totalConnections} total, ${stats.authenticatedConnections} authenticated`);
+    
+    // List all connected users
+    const connectedUserIds = this.getConnectedUserIds();
+    console.log(`👥 [SOCKET-SERVICE] Connected user IDs: [${connectedUserIds.join(', ')}]`);
+    console.log(`🔍 [SOCKET-SERVICE] Is driver ${driverId} connected? ${connectedUserIds.includes(driverId)}`);
+    
+    this.io.to(driverRoom).emit(eventName, data);
+    console.log(`✅ [SOCKET-SERVICE] Event '${eventName}' emitted to room ${driverRoom}`);
+    console.log(`🚗 [SOCKET-SERVICE] Event '${eventName}' emitted to driver ${driverId}:`, {
+      driverId,
+      eventName,
+      driverRoom,
+      dataKeys: Object.keys(data),
+      assignmentId: data.assignmentId || 'N/A',
+      orderId: data.orderId || 'N/A'
+    });
+  }
+
+  /**
+   * Emit driver assignment status change
+   */
+  public emitDriverAssignmentUpdate(driverId: number, assignmentData: any): void {
+    if (!this.io) {
+      console.warn('🔌 Socket not initialized, cannot emit assignment update');
+      return;
+    }
+
+    this.emitToDriver(driverId, 'assignment_status_change', assignmentData);
+    console.log(`📋 Assignment status update emitted to driver ${driverId}`);
+  }
 }
 
 // Export singleton instance

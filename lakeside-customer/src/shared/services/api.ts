@@ -355,9 +355,7 @@ export const walletAPI = {
     }
   },
 
-  async checkBalance(
-    amount: number
-  ): Promise<{
+  async checkBalance(amount: number): Promise<{
     success: boolean;
     data: { hasSufficientBalance: boolean; currentBalance: number };
     message?: string;

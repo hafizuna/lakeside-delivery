@@ -1,7 +1,8 @@
 import { Request, Response } from 'express';
-import { PrismaClient } from '@prisma/client';
+import { PrismaClient, OrderStatus } from '@prisma/client';
 import { AuthenticatedRequest } from '../types/auth';
 import socketService from '../services/socketService';
+import assignmentTriggerService from '../services/assignmentTriggerService';
 
 const prisma = new PrismaClient();
 
@@ -147,13 +148,37 @@ export const updateOrderStatus = async (req: AuthenticatedRequest, res: Response
       });
     }
 
-    // Update order status
+    // Update order status with proper timestamp fields
+    const updateData: any = { 
+      status,
+      updatedAt: new Date(),
+    };
+    
+    // Set appropriate timestamp fields based on status
+    switch (status) {
+      case 'ACCEPTED':
+        updateData.acceptedAt = new Date();
+        break;
+      case 'PREPARING':
+        updateData.preparingAt = new Date();
+        break;
+      case 'READY':
+        updateData.readyAt = new Date();
+        break;
+      case 'PICKED_UP':
+        updateData.pickedUpAt = new Date();
+        break;
+      case 'DELIVERED':
+        updateData.deliveredAt = new Date();
+        break;
+    }
+    
+    console.log(`📝 [ORDER-UPDATE] Updating order ${id} to status: ${status}`);
+    console.log(`📝 [ORDER-UPDATE] Update data:`, updateData);
+    
     const updatedOrder = await prisma.order.update({
       where: { id: parseInt(id) },
-      data: { 
-        status,
-        updatedAt: new Date(),
-      },
+      data: updateData,
       include: {
         orderItems: {
           include: {
@@ -183,6 +208,33 @@ export const updateOrderStatus = async (req: AuthenticatedRequest, res: Response
       newStatus: status,
       customerId: updatedOrder.customerId
     });
+
+    // 🎯 HYBRID ASSIGNMENT SYSTEM: Trigger assignment process for relevant status changes
+    console.log(`🎯 [ORDER-UPDATE] About to call assignment trigger service...`);
+    console.log(`🎯 [ORDER-UPDATE] Order ID: ${updatedOrder.id}`);
+    console.log(`🎯 [ORDER-UPDATE] New Status: ${status}`);
+    console.log(`🎯 [ORDER-UPDATE] Previous Status: ${existingOrder.status}`);
+    console.log(`🎯 [ORDER-UPDATE] Current timestamp: ${new Date().toISOString()}`);
+    
+    try {
+      const assignmentResult = await assignmentTriggerService.handleOrderStatusChange(
+        updatedOrder.id,
+        status as OrderStatus,
+        existingOrder.status as OrderStatus
+      );
+      
+      console.log(`🎯 [ORDER-UPDATE] Assignment trigger completed with result:`, assignmentResult);
+      
+      if (assignmentResult.success) {
+        console.log('🚀 [ORDER-UPDATE] Assignment trigger successful:', assignmentResult.message);
+      } else {
+        console.log('⚠️ [ORDER-UPDATE] Assignment trigger info:', assignmentResult.message);
+      }
+    } catch (assignmentError) {
+      console.error('❌ [ORDER-UPDATE] Assignment trigger error (non-blocking):', assignmentError);
+      console.error('❌ [ORDER-UPDATE] Error stack:', assignmentError instanceof Error ? assignmentError.stack : 'No stack trace');
+      // Don't fail the order status update if assignment trigger fails
+    }
 
     // Transform order to include calculated fields
     const transformedOrder = {

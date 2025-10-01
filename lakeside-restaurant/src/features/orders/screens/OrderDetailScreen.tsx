@@ -91,7 +91,7 @@ interface OrderDetail {
 const OrderDetailScreen: React.FC = () => {
   const navigation = useNavigation<OrderDetailScreenNavigationProp>();
   const route = useRoute<OrderDetailScreenRouteProp>();
-  const { updateOrderStatus } = useOrders();
+  const { updateOrderStatus, canAcceptOrder, canRejectOrder } = useOrders();
   
   const orderId = route.params?.orderId;
   
@@ -99,6 +99,48 @@ const OrderDetailScreen: React.FC = () => {
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [updatingStatus, setUpdatingStatus] = useState(false);
+  
+  // Simple grace period calculation
+  const getGracePeriodStatus = () => {
+    if (!order || order.status !== 'PENDING') {
+      return { actionsDisabled: false, isInGracePeriod: false, remainingTime: '0:00' };
+    }
+    
+    const now = new Date().getTime();
+    const created = new Date(order.createdAt).getTime();
+    const elapsedMs = now - created;
+    const remainingMs = Math.max(0, 60000 - elapsedMs); // 1 minute
+    const isInGracePeriod = remainingMs > 0;
+    
+    const remainingSeconds = Math.ceil(remainingMs / 1000);
+    const minutes = Math.floor(remainingSeconds / 60);
+    const seconds = remainingSeconds % 60;
+    const remainingTime = `${minutes}:${seconds.toString().padStart(2, '0')}`;
+    
+    return {
+      actionsDisabled: isInGracePeriod,
+      isInGracePeriod,
+      remainingTime
+    };
+  };
+  
+  const gracePeriodStatus = getGracePeriodStatus();
+  
+  // Update grace period countdown every second
+  useEffect(() => {
+    let interval: NodeJS.Timeout | null = null;
+    
+    if (order && order.status === 'PENDING' && gracePeriodStatus.isInGracePeriod) {
+      interval = setInterval(() => {
+        // Force re-render to update countdown
+        setOrder(prev => prev ? { ...prev } : null);
+      }, 1000);
+    }
+    
+    return () => {
+      if (interval) clearInterval(interval);
+    };
+  }, [order?.id, order?.status, gracePeriodStatus.isInGracePeriod]);
 
   // Load order details
   const loadOrderDetails = async () => {
@@ -545,27 +587,57 @@ const OrderDetailScreen: React.FC = () => {
         </View>
       </ScrollView>
 
+      {/* Grace Period Notification */}
+      {order.status === 'PENDING' && gracePeriodStatus.isInGracePeriod && (
+        <View style={styles.gracePeriodNotification}>
+          <View style={styles.gracePeriodHeader}>
+            <ActivityIndicator size="small" color={Colors.warning.main} />
+            <Text style={styles.gracePeriodTitle}>Grace Period Active</Text>
+          </View>
+          <Text style={styles.gracePeriodCountdown}>
+            Time remaining: {gracePeriodStatus.remainingTime}
+          </Text>
+          <Text style={styles.gracePeriodMessage}>
+            Giving customer 1 minute to cancel if order is by mistake. Actions will be available when the grace period expires.
+          </Text>
+        </View>
+      )}
+
       {/* Action Buttons */}
       {order.status !== 'DELIVERED' && order.status !== 'CANCELLED' && (
         <View style={styles.actionsContainer}>
           {order.status === 'PENDING' && (
             <View style={styles.actionButtons}>
               <TouchableOpacity
-                style={[styles.actionButton, styles.rejectButton]}
+                style={[
+                  styles.actionButton, 
+                  styles.rejectButton,
+                  (gracePeriodStatus.actionsDisabled || updatingStatus || !orderId || !canRejectOrder(orderId)) && styles.disabledButton
+                ]}
                 onPress={handleRejectOrder}
-                disabled={updatingStatus}
+                disabled={gracePeriodStatus.actionsDisabled || updatingStatus || !orderId || !canRejectOrder(orderId)}
               >
-                <Text style={styles.rejectButtonText}>Reject</Text>
+                <Text style={[
+                  styles.rejectButtonText,
+                  (gracePeriodStatus.actionsDisabled || !orderId || !canRejectOrder(orderId)) && styles.disabledButtonText
+                ]}>Reject</Text>
               </TouchableOpacity>
               <TouchableOpacity
-                style={[styles.actionButton, styles.acceptButton]}
+                style={[
+                  styles.actionButton, 
+                  styles.acceptButton,
+                  (gracePeriodStatus.actionsDisabled || updatingStatus || !orderId || !canAcceptOrder(orderId)) && styles.disabledButton
+                ]}
                 onPress={handleAcceptOrder}
-                disabled={updatingStatus}
+                disabled={gracePeriodStatus.actionsDisabled || updatingStatus || !orderId || !canAcceptOrder(orderId)}
               >
                 {updatingStatus ? (
                 <ActivityIndicator size="small" color={Colors.text.inverse} />
                 ) : (
-                  <Text style={styles.acceptButtonText}>Accept Order</Text>
+                  <Text style={[
+                    styles.acceptButtonText,
+                    (gracePeriodStatus.actionsDisabled || !orderId || !canAcceptOrder(orderId)) && styles.disabledButtonText
+                  ]}>Accept Order</Text>
                 )}
               </TouchableOpacity>
             </View>
@@ -1089,6 +1161,48 @@ const styles = StyleSheet.create({
     fontSize: Typography.fontSize.md,
     color: Colors.text.secondary,
     marginLeft: Spacing.sm,
+  },
+  // Grace period styles
+  gracePeriodNotification: {
+    backgroundColor: Colors.warning.light,
+    marginHorizontal: Spacing.lg,
+    marginVertical: Spacing.sm,
+    borderRadius: 12,
+    padding: Spacing.md,
+    borderWidth: 1,
+    borderColor: Colors.warning.main,
+  },
+  gracePeriodHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: Spacing.sm,
+  },
+  gracePeriodTitle: {
+    fontSize: Typography.fontSize.md,
+    fontWeight: Typography.fontWeight.semiBold,
+    color: Colors.warning.dark,
+    marginLeft: Spacing.sm,
+  },
+  gracePeriodCountdown: {
+    fontSize: Typography.fontSize.lg,
+    fontWeight: Typography.fontWeight.bold,
+    color: Colors.warning.dark,
+    textAlign: 'center',
+    marginBottom: Spacing.xs,
+  },
+  gracePeriodMessage: {
+    fontSize: Typography.fontSize.sm,
+    color: Colors.warning.dark,
+    textAlign: 'center',
+    lineHeight: 20,
+    marginTop: Spacing.xs,
+  },
+  disabledButton: {
+    backgroundColor: Colors.text.disabled,
+    opacity: 0.6,
+  },
+  disabledButtonText: {
+    color: Colors.text.secondary,
   },
 });
 
