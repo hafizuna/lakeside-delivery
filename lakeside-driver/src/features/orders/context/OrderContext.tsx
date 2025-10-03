@@ -53,6 +53,9 @@ interface OrderContextType extends OrderState {
   acceptAssignmentOffer: (assignmentId: string) => Promise<boolean>;
   declineAssignmentOffer: (assignmentId: string, reason?: string) => Promise<boolean>;
   
+  // Pool Orders (Direct assignment)
+  acceptPoolOrder: (orderId: number) => Promise<boolean>;
+  
   // Order Status Updates
   arriveAtRestaurant: (orderId: number) => Promise<boolean>;
   pickupOrder: (orderId: number) => Promise<boolean>;
@@ -362,15 +365,26 @@ export const OrderProvider: React.FC<OrderProviderProps> = ({ children }) => {
   // Fetch Order History
   const fetchOrderHistory = async () => {
     try {
+      console.log('📋 FETCHING ORDER HISTORY - START');
       dispatch({ type: 'SET_LOADING', payload: true });
       const response = await driverAPI.getOrderHistory({ limit: 50 });
       
+      console.log('📋 ORDER HISTORY API RESPONSE:', response);
+      console.log('📋 Response success:', response.success);
+      console.log('📋 Response data type:', typeof response.data);
+      console.log('📋 Response data isArray:', Array.isArray(response.data));
+      console.log('📋 Response data length:', response.data?.length);
+      console.log('📋 Response data:', response.data);
+      
       if (response.success) {
+        console.log('📋 DISPATCHING ORDER HISTORY:', response.data);
         dispatch({ type: 'SET_ORDER_HISTORY', payload: response.data });
       } else {
+        console.log('❌ ORDER HISTORY FETCH FAILED:', response);
         dispatch({ type: 'SET_ERROR', payload: 'Failed to fetch order history' });
       }
     } catch (error: any) {
+      console.error('💫 ORDER HISTORY FETCH ERROR:', error);
       dispatch({ type: 'SET_ERROR', payload: error.message || 'Network error' });
     }
   };
@@ -389,10 +403,61 @@ export const OrderProvider: React.FC<OrderProviderProps> = ({ children }) => {
         await driverStatusService.setBusy();
         return true;
       } else {
-        dispatch({ type: 'SET_ERROR', payload: response.message || 'Failed to accept assignment' });
+        // Check if assignment expired - convert to pool order acceptance
+        if (response.message?.includes('expired') || response.message?.includes('unavailable')) {
+          console.log('⚠️ Assignment expired, converting to pool order acceptance...');
+          
+          // Try to find the orderId from current assignment offer or available orders
+          if (state.assignmentOffer?.orderId) {
+            console.log('🌊 Converting expired assignment to pool order:', state.assignmentOffer.orderId);
+            
+            // Clear the expired assignment offer first
+            dispatch({ type: 'SET_ASSIGNMENT_OFFER', payload: null });
+            
+            // Accept as pool order
+            const poolResult = await acceptPoolOrder(state.assignmentOffer.orderId);
+            if (poolResult) {
+              console.log('✅ Successfully converted expired assignment to pool order!');
+              return true;
+            } else {
+              console.log('❌ Pool order conversion failed');
+              dispatch({ type: 'SET_ERROR', payload: 'Assignment expired and pool acceptance failed. Please try from available orders.' });
+            }
+          } else {
+            console.log('❌ Cannot convert - no orderId available');
+            dispatch({ type: 'SET_ERROR', payload: 'Assignment expired. Please check available orders for direct acceptance.' });
+          }
+        } else {
+          dispatch({ type: 'SET_ERROR', payload: response.message || 'Failed to accept assignment' });
+        }
         return false;
       }
     } catch (error: any) {
+      dispatch({ type: 'SET_ERROR', payload: error.message || 'Network error' });
+      return false;
+    }
+  };
+
+  // Accept Pool Order (Direct assignment)
+  const acceptPoolOrder = async (orderId: number): Promise<boolean> => {
+    try {
+      console.log('🌊 POOL ORDER CONTEXT: Accepting pool order', orderId);
+      dispatch({ type: 'SET_LOADING', payload: true });
+      const response = await driverAPI.acceptPoolOrder(orderId);
+      
+      if (response.success) {
+        console.log('✅ POOL ORDER CONTEXT: Pool order accepted successfully');
+        dispatch({ type: 'ACCEPT_ORDER', payload: response.data });
+        // Set driver to busy when accepting a pool order
+        await driverStatusService.setBusy();
+        return true;
+      } else {
+        console.log('❌ POOL ORDER CONTEXT: Failed to accept pool order:', response.message);
+        dispatch({ type: 'SET_ERROR', payload: response.message || 'Failed to accept pool order' });
+        return false;
+      }
+    } catch (error: any) {
+      console.error('💫 POOL ORDER CONTEXT: Error accepting pool order:', error);
       dispatch({ type: 'SET_ERROR', payload: error.message || 'Network error' });
       return false;
     }
@@ -657,6 +722,7 @@ export const OrderProvider: React.FC<OrderProviderProps> = ({ children }) => {
     fetchOrderHistory,
     acceptAssignmentOffer,
     declineAssignmentOffer,
+    acceptPoolOrder,
     arriveAtRestaurant,
     pickupOrder,
     startDelivery,

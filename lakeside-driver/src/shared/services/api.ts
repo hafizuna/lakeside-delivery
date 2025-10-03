@@ -155,6 +155,10 @@ export interface Order {
   arrivedAtRestaurantAt?: Date;
   pickedUpAt?: Date;
   deliveredAt?: Date;
+  // Pool order system fields
+  isPoolOrder?: boolean;
+  poolEntryTime?: string;
+  orderType?: 'pool' | 'realtime';
 }
 
 export interface OrderItem {
@@ -265,7 +269,77 @@ export const driverAPI = {
     count: number;
   }> {
     const response = await api.get("/driver/orders/available");
-    return response.data;
+    
+    console.log('🔍 AVAILABLE ORDERS API - Full response structure:', response);
+    console.log('🔍 AVAILABLE ORDERS API - Response data:', response.data);
+    console.log('🔍 AVAILABLE ORDERS API - Response.data.data:', response.data?.data);
+    console.log('🔍 AVAILABLE ORDERS API - Response.data.success:', response.data?.success);
+    
+    // Handle different possible API response structures
+    if (response.data?.success) {
+      let ordersArray = null;
+      
+      // Check different possible locations for the orders array
+      if (Array.isArray(response.data.data)) {
+        console.log('🔍 Found orders in response.data.data');
+        ordersArray = response.data.data;
+      } else if (Array.isArray(response.data)) {
+        console.log('🔍 Found orders in response.data');
+        ordersArray = response.data;
+      } else if (response.data.orders && Array.isArray(response.data.orders)) {
+        console.log('🔍 Found orders in response.data.orders');
+        ordersArray = response.data.orders;
+      } else {
+        console.log('❌ No orders array found in available orders response');
+        return {
+          success: true,
+          data: [],
+          count: 0
+        };
+      }
+      
+      if (ordersArray && ordersArray.length > 0) {
+        console.log('🔍 AVAILABLE ORDERS API - Raw orders array:', ordersArray);
+        
+        const transformedOrders = ordersArray.map((backendOrder: any) => {
+          console.log('🔍 Transforming available order:', backendOrder);
+          const transformed = transformBackendOrder(backendOrder);
+          
+          // Add pool order metadata
+          const isPoolOrder = backendOrder.status === 'READY' && !backendOrder.driverAssignments?.length;
+          const poolEntryTime = backendOrder.createdAt || backendOrder.updatedAt;
+          
+          return {
+            ...transformed,
+            isPoolOrder,
+            poolEntryTime: isPoolOrder ? poolEntryTime : null,
+            orderType: isPoolOrder ? 'pool' : 'realtime'
+          };
+        });
+        
+        console.log('🔍 AVAILABLE ORDERS API - Transformed orders with pool metadata:', transformedOrders);
+        
+        return {
+          success: true,
+          data: transformedOrders,
+          count: response.data.count || transformedOrders.length
+        };
+      } else {
+        console.log('🔍 AVAILABLE ORDERS API - Empty orders array');
+        return {
+          success: true,
+          data: [],
+          count: 0
+        };
+      }
+    }
+    
+    console.log('❌ AVAILABLE ORDERS API - Request failed or unexpected structure');
+    return {
+      success: false,
+      data: [],
+      count: 0
+    };
   },
 
 
@@ -282,6 +356,36 @@ export const driverAPI = {
     assignmentId: string
   ): Promise<{ success: boolean; data: Order; message: string }> {
     const response = await api.post(`/driver/assignments/offers/${assignmentId}/accept`);
+    return response.data;
+  },
+
+  // Pool order direct acceptance (new endpoint)
+  async acceptPoolOrder(
+    orderId: number
+  ): Promise<{ success: boolean; data: Order; message: string }> {
+    console.log('🌊 POOL ORDER API: Accepting pool order directly', orderId);
+    
+    const response = await api.post(`/driver/orders/${orderId}/accept`);
+    
+    console.log('🌊 POOL ORDER API: Response received:', response);
+    console.log('🌊 POOL ORDER API: Response data:', response.data);
+    console.log('🌊 POOL ORDER API: Response success:', response.data?.success);
+    console.log('🌊 POOL ORDER API: Response message:', response.data?.message);
+    
+    // Transform response if it contains order data
+    if (response.data.success && response.data.data) {
+      console.log('🌊 POOL ORDER API: Transforming order data...');
+      const transformedOrder = transformBackendOrder(response.data.data);
+      console.log('🌊 POOL ORDER API: Transformed order:', transformedOrder);
+      
+      return {
+        success: true,
+        data: transformedOrder,
+        message: response.data.message || 'Pool order accepted successfully'
+      };
+    }
+    
+    console.log('🌊 POOL ORDER API: Returning raw response:', response.data);
     return response.data;
   },
 
@@ -501,7 +605,67 @@ export const driverAPI = {
     total: number;
   }> {
     const response = await api.get("/driver/orders/history", { params });
-    return response.data;
+    
+    console.log('📋 ORDER HISTORY API - Full response structure:', response);
+    console.log('📋 ORDER HISTORY API - Response data:', response.data);
+    console.log('📋 ORDER HISTORY API - Response data type:', typeof response.data);
+    console.log('📋 ORDER HISTORY API - Response.data.data:', response.data?.data);
+    console.log('📋 ORDER HISTORY API - Response.data.success:', response.data?.success);
+    
+    // Handle different possible API response structures
+    if (response.data?.success) {
+      let ordersArray = null;
+      
+      // Check different possible locations for the orders array
+      if (Array.isArray(response.data.data)) {
+        console.log('📋 Found orders in response.data.data');
+        ordersArray = response.data.data;
+      } else if (Array.isArray(response.data)) {
+        console.log('📋 Found orders in response.data');
+        ordersArray = response.data;
+      } else if (response.data.orders && Array.isArray(response.data.orders)) {
+        console.log('📋 Found orders in response.data.orders');
+        ordersArray = response.data.orders;
+      } else {
+        console.log('❌ No orders array found in response');
+        return {
+          success: true,
+          data: [],
+          total: 0
+        };
+      }
+      
+      if (ordersArray && ordersArray.length > 0) {
+        console.log('📋 ORDER HISTORY API - Raw orders array:', ordersArray);
+        
+        const transformedOrders = ordersArray.map((backendOrder: any) => {
+          console.log('📋 Transforming history order:', backendOrder);
+          return transformBackendOrder(backendOrder, 'DELIVERED');
+        });
+        
+        console.log('📋 ORDER HISTORY API - Transformed orders:', transformedOrders);
+        
+        return {
+          success: true,
+          data: transformedOrders,
+          total: response.data.total || transformedOrders.length
+        };
+      } else {
+        console.log('📋 ORDER HISTORY API - Empty orders array');
+        return {
+          success: true,
+          data: [],
+          total: 0
+        };
+      }
+    }
+    
+    console.log('❌ ORDER HISTORY API - Request failed or unexpected structure');
+    return {
+      success: false,
+      data: [],
+      total: 0
+    };
   },
 
   async updateLocation(

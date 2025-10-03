@@ -4324,15 +4324,55 @@ Main Navigation (Bottom Tabs):
   - Weekly challenges
 
 ##### **2. Orders Tab**
-**2.1 Available Orders**
-- List/Map view toggle
-- Filter (distance, price, restaurant)
-- Order cards showing:
-  - Restaurant name & distance
-  - Customer distance
-  - Estimated earnings
-  - Items count
-  - Accept/Decline buttons
+**2.1 Available Orders - HYBRID SYSTEM** 🆕
+
+The Available Orders tab implements a **Hybrid Real-time + Pool System** to ensure no orders are lost:
+
+**📱 UI Display:**
+```
+┌─────────────────────────────────────┐
+│ 🔴 POOL ORDER - Pizza Palace       │  ← Pool orders (red indicator)
+│ #79 • $3.60 • 25 mins waiting      │  ← Shows time in pool
+│ 📍 2.3km • 3 items • $14.02        │
+│ [Accept Order] - No timer           │  ← Direct acceptance
+├─────────────────────────────────────┤
+│ 🟢 LIVE ORDER - Burger Joint       │  ← Real-time offers (green)
+│ #80 • $4.50 • Fresh assignment     │  ← Just assigned
+│ 📍 1.8km • 2 items • $12.50        │
+│ [Accept - 0:25] - Timer countdown   │  ← TTL timer
+└─────────────────────────────────────┘
+```
+
+**🔄 System Flow:**
+1. **Real-time Assignment Attempt**: When order becomes READY, system tries to assign to online drivers
+2. **Pool Fallback**: If no drivers available → Order goes to "Available Orders Pool"
+3. **Pool Display**: All drivers see pool orders when they come online (red indicator)
+4. **Direct Acceptance**: Pool orders can be accepted without timer pressure
+5. **Instant Assignment**: Accepting pool order creates assignment immediately
+
+**⚙️ Technical Implementation:**
+- **Pool Detection**: Orders with status='READY' + no active driver_assignments
+- **API Integration**: Uses existing `getAvailableOrders` with pool filtering
+- **Accept Flow**: New `acceptPoolOrder(orderId)` endpoint for direct assignment
+- **UI Differentiation**: Red badge/urgent indicator for pool orders vs green for live
+- **No Timer**: Pool orders show "Accept Order" button (no countdown)
+
+**📊 Pool Order Characteristics:**
+- Shows time waiting in pool ("25 mins waiting")
+- Higher visual priority (red color, "URGENT" badge)
+- No acceptance pressure (no timer)
+- Same earnings display
+- Admin can manually assign if needed
+
+**List/Map view toggle**
+**Filter (distance, price, restaurant, type)**
+**Order cards showing:**
+- Restaurant name & distance
+- Customer distance  
+- Estimated earnings
+- Items count
+- Time in system (for pool orders)
+- Accept buttons (with/without timer based on type)
 
 **2.2 Active Delivery Flow**
 - Order accepted screen

@@ -30,11 +30,15 @@ const SuccessModal: React.FC<SuccessModalProps> = ({
   message,
   amount,
   currency = '₹',
-  duration = 8000, // 8 seconds default
+  duration = 10000, // 10 seconds default
   onDismiss,
 }) => {
   const scaleValue = new Animated.Value(0);
   const fadeValue = new Animated.Value(0);
+  const progressValue = new Animated.Value(0);
+  const bounceValue = new Animated.Value(0);
+  const rotateValue = new Animated.Value(0);
+  const pulseValue = new Animated.Value(1);
 
   useEffect(() => {
     console.log('🎆 === SUCCESS MODAL DEBUG ===');
@@ -47,21 +51,61 @@ const SuccessModal: React.FC<SuccessModalProps> = ({
     console.log('=== END SUCCESS MODAL DEBUG ===');
     
     if (visible) {
-      console.log('🚀 SUCCESS MODAL: Starting animations...');
-      // Start animations
-      Animated.parallel([
-        Animated.spring(scaleValue, {
+      console.log('🚀 SUCCESS MODAL: Starting enhanced animations...');
+      
+      // Start entrance animations
+      Animated.sequence([
+        Animated.parallel([
+          Animated.spring(scaleValue, {
+            toValue: 1,
+            useNativeDriver: true,
+            tension: 80,
+            friction: 6,
+          }),
+          Animated.timing(fadeValue, {
+            toValue: 1,
+            duration: 400,
+            useNativeDriver: true,
+          }),
+        ]),
+        // Icon bounce animation
+        Animated.spring(bounceValue, {
           toValue: 1,
           useNativeDriver: true,
-          tension: 100,
-          friction: 8,
-        }),
-        Animated.timing(fadeValue, {
-          toValue: 1,
-          duration: 300,
-          useNativeDriver: true,
+          tension: 200,
+          friction: 4,
         }),
       ]).start();
+
+      // Continuous pulse animation for amount
+      Animated.loop(
+        Animated.sequence([
+          Animated.timing(pulseValue, {
+            toValue: 1.05,
+            duration: 1000,
+            useNativeDriver: true,
+          }),
+          Animated.timing(pulseValue, {
+            toValue: 1,
+            duration: 1000,
+            useNativeDriver: true,
+          }),
+        ])
+      ).start();
+
+      // Celebrate rotation animation
+      Animated.timing(rotateValue, {
+        toValue: 1,
+        duration: 1500,
+        useNativeDriver: true,
+      }).start();
+
+      // Start progress bar animation
+      Animated.timing(progressValue, {
+        toValue: 1,
+        duration: duration,
+        useNativeDriver: false,
+      }).start();
 
       // Auto-dismiss after duration
       const timer = setTimeout(() => {
@@ -72,9 +116,13 @@ const SuccessModal: React.FC<SuccessModalProps> = ({
       return () => clearTimeout(timer);
     } else {
       console.log('🟨 SUCCESS MODAL: Resetting animations (not visible)');
-      // Reset animations
+      // Reset all animations
       scaleValue.setValue(0);
       fadeValue.setValue(0);
+      progressValue.setValue(0);
+      bounceValue.setValue(0);
+      rotateValue.setValue(0);
+      pulseValue.setValue(1);
     }
   }, [visible, duration]);
 
@@ -117,29 +165,87 @@ const SuccessModal: React.FC<SuccessModalProps> = ({
             },
           ]}
         >
-          {/* Success Icon */}
-          <View style={styles.iconContainer}>
-            <Ionicons
-              name="checkmark-circle"
-              size={64}
-              color={Colors.success.main}
-            />
+          {/* Celebration Emojis */}
+          <View style={styles.celebrationContainer}>
+            <Animated.View
+              style={[
+                styles.emojiContainer,
+                {
+                  transform: [
+                    {
+                      rotate: rotateValue.interpolate({
+                        inputRange: [0, 1],
+                        outputRange: ['0deg', '20deg'],
+                      }),
+                    },
+                  ],
+                },
+              ]}
+            >
+              <Text style={styles.celebrationEmoji}>🎉</Text>
+            </Animated.View>
+            <Animated.View
+              style={[
+                styles.emojiContainer,
+                {
+                  transform: [
+                    {
+                      rotate: rotateValue.interpolate({
+                        inputRange: [0, 1],
+                        outputRange: ['0deg', '-20deg'],
+                      }),
+                    },
+                  ],
+                },
+              ]}
+            >
+              <Text style={styles.celebrationEmoji}>🎉</Text>
+            </Animated.View>
           </View>
 
-          {/* Title */}
-          <Text style={styles.title}>{title}</Text>
+          {/* Success Icon */}
+          <Animated.View
+            style={[
+              styles.iconContainer,
+              {
+                transform: [{ scale: bounceValue }],
+              },
+            ]}
+          >
+            <Ionicons
+              name="checkmark-circle"
+              size={80}
+              color={Colors.success.main}
+            />
+          </Animated.View>
+
+          {/* Title with Emoji */}
+          <View style={styles.titleContainer}>
+            <Text style={styles.titleEmoji}>🚀</Text>
+            <Text style={styles.title}>{title}</Text>
+            <Text style={styles.titleEmoji}>🚀</Text>
+          </View>
 
           {/* Amount Display (if provided) */}
           {amount !== undefined && (
-            <View style={styles.amountContainer}>
+            <Animated.View
+              style={[
+                styles.amountContainer,
+                {
+                  transform: [{ scale: pulseValue }],
+                },
+              ]}
+            >
+              <Text style={styles.amountLabel}>💰 You Earned</Text>
               <Text style={styles.amountText}>
                 {currency}{amount.toFixed(2)}
               </Text>
-            </View>
+              <Text style={styles.amountSubtext}>Great job! 👏</Text>
+            </Animated.View>
           )}
 
           {/* Message */}
-          <Text style={styles.message}>{message}</Text>
+          <Text style={styles.message}>🎆 {message} 🎆</Text>
 
           {/* Progress Bar (visual countdown) */}
           <View style={styles.progressContainer}>
@@ -147,7 +253,7 @@ const SuccessModal: React.FC<SuccessModalProps> = ({
               style={[
                 styles.progressBar,
                 {
-                  width: fadeValue.interpolate({
+                  width: progressValue.interpolate({
                     inputRange: [0, 1],
                     outputRange: ['0%', '100%'],
                   }),
@@ -164,55 +270,98 @@ const SuccessModal: React.FC<SuccessModalProps> = ({
 const styles = StyleSheet.create({
   overlay: {
     flex: 1,
-    backgroundColor: 'rgba(0, 0, 0, 0.5)',
+    backgroundColor: 'rgba(0, 0, 0, 0.6)',
     justifyContent: 'center',
     alignItems: 'center',
   },
   modalContainer: {
     backgroundColor: Colors.background.primary,
-    borderRadius: 20,
+    borderRadius: 24,
     padding: Spacing.xl,
     marginHorizontal: Spacing.lg,
     alignItems: 'center',
-    maxWidth: screenWidth * 0.85,
+    maxWidth: screenWidth * 0.9,
     shadowColor: '#000',
     shadowOffset: {
       width: 0,
-      height: 4,
+      height: 8,
     },
-    shadowOpacity: 0.25,
-    shadowRadius: 10,
-    elevation: 8,
+    shadowOpacity: 0.3,
+    shadowRadius: 15,
+    elevation: 12,
+  },
+  celebrationContainer: {
+    position: 'absolute',
+    top: -10,
+    left: 0,
+    right: 0,
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    paddingHorizontal: 20,
+    zIndex: 1,
+  },
+  emojiContainer: {
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  celebrationEmoji: {
+    fontSize: 32,
   },
   iconContainer: {
+    marginBottom: Spacing.md,
+    marginTop: Spacing.md,
+  },
+  titleContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
     marginBottom: Spacing.lg,
   },
+  titleEmoji: {
+    fontSize: 24,
+    marginHorizontal: Spacing.sm,
+  },
   title: {
-    fontSize: Typography.fontSize.xl,
+    fontSize: Typography.fontSize['2xl'],
     fontWeight: Typography.fontWeight.bold,
     color: Colors.text.primary,
     textAlign: 'center',
-    marginBottom: Spacing.md,
   },
   amountContainer: {
     backgroundColor: Colors.success.light,
-    paddingHorizontal: Spacing.lg,
-    paddingVertical: Spacing.sm,
-    borderRadius: 12,
-    marginBottom: Spacing.md,
+    paddingHorizontal: Spacing.xl,
+    paddingVertical: Spacing.lg,
+    borderRadius: 20,
+    marginBottom: Spacing.lg,
+    alignItems: 'center',
+    borderWidth: 2,
+    borderColor: Colors.success.main,
+  },
+  amountLabel: {
+    fontSize: Typography.fontSize.sm,
+    color: Colors.success.dark,
+    marginBottom: Spacing.xs,
+    fontWeight: Typography.fontWeight.medium,
   },
   amountText: {
-    fontSize: Typography.fontSize['2xl'],
+    fontSize: Typography.fontSize['3xl'],
     fontWeight: Typography.fontWeight.bold,
     color: Colors.success.main,
     textAlign: 'center',
+    marginBottom: Spacing.xs,
+  },
+  amountSubtext: {
+    fontSize: Typography.fontSize.sm,
+    color: Colors.success.dark,
+    fontWeight: Typography.fontWeight.medium,
   },
   message: {
-    fontSize: Typography.fontSize.base,
+    fontSize: Typography.fontSize.lg,
     color: Colors.text.secondary,
     textAlign: 'center',
-    lineHeight: 22,
+    lineHeight: 24,
     marginBottom: Spacing.lg,
+    fontWeight: Typography.fontWeight.medium,
   },
   progressContainer: {
     width: '100%',

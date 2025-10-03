@@ -33,7 +33,14 @@ const ActiveDeliveryScreen: React.FC<ActiveDeliveryScreenProps> = ({ onDeliveryC
   const navigation = useNavigation<NavigationProp>();
   const { activeOrder } = useOrders();
   const [showSuccessModal, setShowSuccessModal] = useState(false);
-  const [deliveryEarning, setDeliveryEarning] = useState(0);
+  const [deliveryEarning, setDeliveryEarning] = useState<number>(0);
+  const [isCompletingDelivery, setIsCompletingDelivery] = useState(false);
+  
+  // Debug state changes
+  useEffect(() => {
+    console.log('🟢 SUCCESS MODAL STATE CHANGED:', showSuccessModal);
+    console.log('💰 DELIVERY EARNING STATE CHANGED:', deliveryEarning);
+  }, [showSuccessModal, deliveryEarning]);
 
   const {
     currentStatus,
@@ -118,20 +125,26 @@ const ActiveDeliveryScreen: React.FC<ActiveDeliveryScreenProps> = ({ onDeliveryC
     // Check if this is the "Mark as Delivered" action
     if (currentStatus === 'EN_ROUTE_TO_CUSTOMER') {
       console.log('✅ DETECTED: Mark as Delivered action!');
+      
+      // Set completion state to prevent early navigation
+      setIsCompletingDelivery(true);
+      
       // Store earning amount before transition
       const earning = parseFloat(activeOrder?.driverEarning?.toString() || '0');
       console.log('💰 Setting earning amount:', earning);
       setDeliveryEarning(earning);
       
-      console.log('🔄 Performing status transition...');
-      // Perform the delivery completion
-      await handleStatusTransition();
-      
-      console.log('🎉 Showing success modal...');
-      // Show success modal after completion
+      console.log('🎉 Showing success modal FIRST...');
+      // Show success modal BEFORE the transition to prevent unmounting issues
       setShowSuccessModal(true);
       
       console.log('🟢 Success modal state set to true');
+      
+      // Small delay to let modal render, then perform transition
+      setTimeout(async () => {
+        console.log('🔄 Performing status transition after delay...');
+        await handleStatusTransition();
+      }, 100);
     } else {
       console.log('🔄 Regular status transition for:', currentStatus);
       // Regular status transition
@@ -187,36 +200,74 @@ const ActiveDeliveryScreen: React.FC<ActiveDeliveryScreenProps> = ({ onDeliveryC
   };
 
   const handleSuccessModalDismiss = () => {
+    console.log('💫 SUCCESS MODAL: Dismissing - showing completion screen...');
     setShowSuccessModal(false);
-    // Navigate after modal dismisses
-    setTimeout(() => {
-      if (onDeliveryComplete) {
-        onDeliveryComplete();
-      } else {
-        navigation.goBack();
-      }
-    }, 300);
+    // Don't navigate automatically - let user control when to continue
   };
 
-  // Handle case where order becomes null after delivery completion
-  useEffect(() => {
-    if (!activeOrder) {
-      console.log('ActiveDeliveryScreen: Order is null, navigating back');
-      // Small delay to prevent navigation issues
-      setTimeout(() => {
-        if (onDeliveryComplete) {
-          onDeliveryComplete();
-        } else {
-          navigation.goBack();
-        }
-      }, 100);
+  const handleContinueToOrders = () => {
+    console.log('🔀 MANUAL NAVIGATION: User chose to continue to orders');
+    setIsCompletingDelivery(false); // Reset completion state
+    if (onDeliveryComplete) {
+      onDeliveryComplete();
+    } else {
+      navigation.goBack();
     }
-  }, [activeOrder, navigation, onDeliveryComplete]);
+  };
 
+  // Note: Removed automatic navigation - user now controls when to continue
+
+  // Show completion screen when order is null (after delivery completion)
   if (!activeOrder) {
+    // If success modal is showing, render it with overlay
+    if (showSuccessModal) {
+      return (
+        <View style={styles.container}>
+          <SuccessModal
+            visible={showSuccessModal}
+            title="Delivery Complete!"
+            message="Great job! Keep up the excellent work!"
+            amount={deliveryEarning}
+            currency="$"
+            duration={10000}
+            onDismiss={handleSuccessModalDismiss}
+          />
+        </View>
+      );
+    }
+    
+    // Otherwise show completion screen  
     return (
-      <View style={styles.container}>
-        <Text>Delivery completed! Redirecting...</Text>
+      <View style={styles.completionContainer}>
+        <StatusBar barStyle="dark-content" backgroundColor="#fff" translucent={false} />
+        
+        {/* Success Icon */}
+        <View style={styles.completionIconContainer}>
+          <Ionicons name="checkmark-circle" size={80} color={Colors.success.main} />
+        </View>
+        
+        {/* Title */}
+        <Text style={styles.completionTitle}>Delivery Complete!</Text>
+        
+        {/* Earnings Display */}
+        <View style={styles.completionEarningsContainer}>
+          <Text style={styles.completionEarningsLabel}>You earned</Text>
+          <Text style={styles.completionEarningsAmount}>${deliveryEarning.toFixed(2)}</Text>
+        </View>
+        
+        {/* Message */}
+        <Text style={styles.completionMessage}>
+          Great job! Keep up the excellent work!
+        </Text>
+        
+        {/* Continue Button */}
+        <TouchableOpacity 
+          style={styles.continueButton}
+          onPress={handleContinueToOrders}
+        >
+          <Text style={styles.continueButtonText}>Continue to Orders</Text>
+          <Ionicons name="arrow-forward" size={20} color="#fff" style={{ marginLeft: 8 }} />
+        </TouchableOpacity>
       </View>
     );
   }
@@ -368,14 +419,15 @@ const ActiveDeliveryScreen: React.FC<ActiveDeliveryScreenProps> = ({ onDeliveryC
         </TouchableOpacity>
       </View>
 
+
       {/* Success Modal */}
       <SuccessModal
         visible={showSuccessModal}
         title="Delivery Complete!"
         message="Great job! Keep up the excellent work!"
         amount={deliveryEarning}
-        currency="₹"
-        duration={8000}
+        currency="$"
+        duration={10000}
         onDismiss={handleSuccessModalDismiss}
       />
     </View>
@@ -556,6 +608,71 @@ const styles = StyleSheet.create({
     fontSize: Typography.fontSize.md,
     fontWeight: Typography.fontWeight.semiBold,
     letterSpacing: 0.5,
+  },
+  // Completion Screen Styles
+  completionContainer: {
+    flex: 1,
+    backgroundColor: Colors.background.primary,
+    justifyContent: 'center',
+    alignItems: 'center',
+    paddingHorizontal: Spacing.xl,
+  },
+  completionIconContainer: {
+    marginBottom: Spacing.xl,
+  },
+  completionTitle: {
+    fontSize: Typography.fontSize['2xl'],
+    fontWeight: Typography.fontWeight.bold,
+    color: Colors.text.primary,
+    textAlign: 'center',
+    marginBottom: Spacing.lg,
+  },
+  completionEarningsContainer: {
+    backgroundColor: Colors.success.light,
+    paddingHorizontal: Spacing.xl,
+    paddingVertical: Spacing.lg,
+    borderRadius: 16,
+    marginBottom: Spacing.xl,
+    alignItems: 'center',
+  },
+  completionEarningsLabel: {
+    fontSize: Typography.fontSize.sm,
+    color: Colors.success.dark,
+    marginBottom: Spacing.xs,
+  },
+  completionEarningsAmount: {
+    fontSize: Typography.fontSize['3xl'],
+    fontWeight: Typography.fontWeight.bold,
+    color: Colors.success.main,
+  },
+  completionMessage: {
+    fontSize: Typography.fontSize.base,
+    color: Colors.text.secondary,
+    textAlign: 'center',
+    lineHeight: 22,
+    marginBottom: Spacing.xl,
+  },
+  continueButton: {
+    backgroundColor: Colors.primary.main,
+    paddingHorizontal: Spacing.xl,
+    paddingVertical: Spacing.md,
+    borderRadius: 12,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    shadowColor: '#000',
+    shadowOffset: {
+      width: 0,
+      height: 2,
+    },
+    shadowOpacity: 0.1,
+    shadowRadius: 4,
+    elevation: 3,
+  },
+  continueButtonText: {
+    color: 'white',
+    fontSize: Typography.fontSize.md,
+    fontWeight: Typography.fontWeight.semiBold,
   },
 });
 

@@ -104,8 +104,17 @@ export const useDeliveryStatusManager = (
           setCurrentStatus('ASSIGNED');
         }
         // Otherwise, let the driver manually control the status
+        // DON'T reset EN_ROUTE_TO_RESTAURANT - let driver control it
+      } else if (order.status === 'READY') {
+        // For READY orders, also allow manual control but initialize properly
+        if (currentStatus === 'ASSIGNED' && !order.arrivedAtRestaurantAt && !order.driverAssignedAt) {
+          // Fresh order, keep ASSIGNED
+        } else if (order.arrivedAtRestaurantAt && currentStatus !== 'WAITING_AT_RESTAURANT') {
+          setCurrentStatus('WAITING_AT_RESTAURANT');
+        }
+        // Don't override EN_ROUTE_TO_RESTAURANT manually set by driver
       } else {
-        // For non-PREPARING orders, use calculated status
+        // For non-PREPARING/READY orders, use calculated status
         if (newStatus !== currentStatus) {
           setCurrentStatus(newStatus);
         }
@@ -120,9 +129,9 @@ export const useDeliveryStatusManager = (
       nextStatus: 'EN_ROUTE_TO_RESTAURANT',
       actionText: 'Start Navigation to Restaurant',
       apiCall: async (orderId: number) => {
-        // Simple status transition - no external API call needed
-        // Just change the local status to indicate driver is en route
-        console.log('🚚 Driver started navigation to restaurant');
+        // This is just a local status change - no API call needed for navigation start
+        console.log('🚚 Driver started navigation to restaurant - local status change');
+        // Return true to allow the status transition to happen
         return true;
       },
     },

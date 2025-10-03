@@ -10,7 +10,7 @@ import {
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Colors, Typography, Spacing } from '../../../shared/theme';
-import { useOrders } from '../context/OrderContext';
+import { useOrders, AssignmentOffer } from '../context/OrderContext';
 import { Order } from '../../../shared/services/api';
 import {
   OrderRequestModal,
@@ -33,6 +33,8 @@ export const OrdersScreen: React.FC = () => {
     fetchOrderHistory,
     clearAssignmentOffer,
     refreshOrders,
+    handleAssignmentOffer,
+    acceptPoolOrder,
   } = useOrders();
 
   const [activeTab, setActiveTab] = useState<TabType>(
@@ -54,6 +56,12 @@ export const OrdersScreen: React.FC = () => {
     }
   }, [assignmentOffer]);
 
+  // Fetch history on mount
+  useEffect(() => {
+    console.log('🔄 OrdersScreen mounted, fetching initial data...');
+    fetchOrderHistory();
+  }, []);
+
   const handleRefresh = async () => {
     if (activeTab === 'available') {
       await fetchAvailableOrders();
@@ -70,7 +78,13 @@ export const OrdersScreen: React.FC = () => {
         styles.tabButton,
         activeTab === tab && styles.activeTabButton,
       ]}
-      onPress={() => setActiveTab(tab)}
+      onPress={() => {
+        setActiveTab(tab);
+        // Fetch history when switching to history tab
+        if (tab === 'history') {
+          fetchOrderHistory();
+        }
+      }}
     >
       <View style={styles.tabContent}>
         <Text
@@ -90,73 +104,200 @@ export const OrdersScreen: React.FC = () => {
     </TouchableOpacity>
   );
 
-  const renderAvailableOrder = ({ item }: { item: Order }) => (
-    <View style={styles.orderCard}>
-      <View style={styles.orderHeader}>
-        <View style={styles.orderInfo}>
-          <Text style={styles.restaurantName}>{item.restaurantName}</Text>
-          <Text style={styles.orderNumber}>#{item.orderNumber}</Text>
-        </View>
-        <View style={styles.orderValue}>
-          <Text style={styles.earnings}>₹{item.driverEarning + item.tip}</Text>
-          <Text style={styles.earningsLabel}>Earnings</Text>
-        </View>
-      </View>
+  const handleAcceptOrder = async (order: Order & { isPoolOrder?: boolean; orderType?: string }) => {
+    try {
+      console.log('Attempting to accept order:', order.id, 'Type:', order.orderType || 'unknown');
+      
+      // Check if this is a pool order
+      if (order.isPoolOrder || order.orderType === 'pool') {
+        console.log('🌊 POOL ORDER: Accepting directly without modal');
+        
+        const success = await acceptPoolOrder(order.id);
+        if (success) {
+          console.log('✅ POOL ORDER: Successfully accepted, should navigate to active delivery');
+          // Order is now active, the context will handle the state update
+        } else {
+          console.log('❌ POOL ORDER: Failed to accept');
+          // Error is handled by the context and displayed to user
+        }
+        return;
+      }
+      
+      // For real-time offers, use the modal system
+      console.log('🟢 REAL-TIME ORDER: Using modal system');
+      
+      // Ensure items array exists to prevent mapping errors
+      const safeOrder = {
+        ...order,
+        items: order.items || [] // Provide empty array if items is undefined
+      };
+      
+      // For real-time orders, create assignment with normal timer
+      const mockAssignmentOffer: AssignmentOffer = {
+        id: `offer-${Date.now()}`,
+        assignmentId: `assignment-${order.id}-${Date.now()}`,
+        orderId: order.id,
+        order: safeOrder,
+        expiresAt: new Date(Date.now() + 30000), // 30 seconds for real-time
+        timeRemaining: 30, // 30 seconds
+        wave: 1,
+        priority: 'medium',
+        distance: 2.3,
+        createdAt: new Date(),
+      };
+      
+      // Trigger the assignment offer modal with this order
+      handleAssignmentOffer(mockAssignmentOffer);
+      
+    } catch (error) {
+      console.error('Error accepting order:', error);
+    }
+  };
 
-      <View style={styles.orderDetails}>
-        <View style={styles.detailRow}>
-          <Text style={styles.detailIcon}>📍</Text>
-          <Text style={styles.detailText} numberOfLines={2}>
-            {item.restaurantAddress}
-          </Text>
-        </View>
-        <View style={styles.detailRow}>
-          <Text style={styles.detailIcon}>👤</Text>
-          <Text style={styles.detailText}>{item.customerName}</Text>
-        </View>
-        <View style={styles.detailRow}>
-          <Text style={styles.detailIcon}>📦</Text>
-          <Text style={styles.detailText}>
-            {item.items?.length || 0} item{(item.items?.length || 0) !== 1 ? 's' : ''} • ₹{item.totalAmount}
-          </Text>
-        </View>
-      </View>
+  const renderAvailableOrder = ({ item }: { item: Order & { isPoolOrder?: boolean; orderType?: string; poolEntryTime?: string } }) => {
+    console.log('🔍 ORDER ITEM (should be transformed now):', {
+      id: item.id,
+      restaurantName: item.restaurantName,
+      restaurantAddress: item.restaurantAddress,
+      customerName: item.customerName,
+      items: item.items,
+      itemsLength: item.items?.length,
+      totalAmount: item.totalAmount,
+      driverEarning: item.driverEarning,
+      isPoolOrder: item.isPoolOrder,
+      orderType: item.orderType
+    });
+    
+    // Now that data is transformed properly, use it directly
+    const driverEarning = parseFloat(item.driverEarning?.toString() || '0');
+    const totalAmount = parseFloat(item.totalAmount?.toString() || '0');
+    const itemCount = item.items?.length || 0;
+    const isPoolOrder = item.isPoolOrder || item.orderType === 'pool';
+    
+    // Calculate time in pool for pool orders
+    let timeInPool = '';
+    if (isPoolOrder && item.poolEntryTime) {
+      const entryTime = new Date(item.poolEntryTime);
+      const now = new Date();
+      const diffMinutes = Math.floor((now.getTime() - entryTime.getTime()) / (1000 * 60));
+      timeInPool = `${diffMinutes} mins waiting`;
+    }
 
-      <View style={styles.orderActions}>
-        <Text style={styles.distanceText}>~2.3 km • 15 mins</Text>
-      </View>
-    </View>
-  );
-
-  const renderHistoryOrder = ({ item }: { item: Order }) => (
-    <View style={styles.historyCard}>
-      <View style={styles.historyHeader}>
-        <View style={styles.historyInfo}>
-          <Text style={styles.historyRestaurant}>{item.restaurantName}</Text>
-          <Text style={styles.historyDate}>
-            {new Date(item.createdAt).toLocaleDateString()}
-          </Text>
+    return (
+      <View style={styles.orderCard}>
+        {/* Pool Order Badge - Subtle */}
+        {isPoolOrder && (
+          <View style={styles.poolBadge}>
+            <Text style={styles.poolBadgeText}>Order is in Pool</Text>
+          </View>
+        )}
+        
+        <View style={styles.orderHeader}>
+          <View style={styles.orderInfo}>
+            <Text style={styles.restaurantName}>{item.restaurantName}</Text>
+            <View style={styles.orderNumberRow}>
+              <Text style={styles.orderNumber}>#{item.orderNumber}</Text>
+              {isPoolOrder && timeInPool && (
+                <Text style={styles.poolTime}>• {timeInPool}</Text>
+              )}
+            </View>
+          </View>
+          <View style={styles.orderValue}>
+            <Text style={styles.earnings}>${driverEarning.toFixed(2)}</Text>
+            <Text style={styles.earningsLabel}>You'll earn</Text>
+          </View>
         </View>
-        <View style={styles.historyStatus}>
-          <Text style={styles.historyEarnings}>₹{item.driverEarning + item.tip}</Text>
-          <View style={[
-            styles.statusBadge,
-            item.status === 'delivered' && styles.deliveredBadge,
-            item.status === 'cancelled' && styles.cancelledBadge,
-          ]}>
-            <Text style={[
-              styles.statusText,
-              item.status === 'delivered' && styles.deliveredText,
-              item.status === 'cancelled' && styles.cancelledText,
-            ]}>
-              {item.status === 'delivered' ? 'Delivered' : 'Cancelled'}
+
+        <View style={styles.orderDetails}>
+          <View style={styles.detailRow}>
+            <Text style={styles.detailIcon}>📍</Text>
+            <Text style={styles.detailText} numberOfLines={2}>
+              {item.restaurantAddress}
+            </Text>
+          </View>
+          <View style={styles.detailRow}>
+            <Text style={styles.detailIcon}>👤</Text>
+            <Text style={styles.detailText}>
+              Deliver to: {item.customerName}
+            </Text>
+          </View>
+          <View style={styles.detailRow}>
+            <Text style={styles.detailIcon}>📦</Text>
+            <Text style={styles.detailText}>
+              {itemCount} item{itemCount !== 1 ? 's' : ''} • Order total: ${totalAmount.toFixed(2)}
             </Text>
           </View>
         </View>
+
+        <View style={styles.orderActions}>
+          <View style={styles.orderDistance}>
+            <Text style={styles.distanceText}>🗺️ ~2.3 km • ⏱️ 15 mins</Text>
+          </View>
+          <TouchableOpacity 
+            style={styles.acceptButton}
+            onPress={() => handleAcceptOrder(item)}
+          >
+            <Text style={styles.acceptButtonText}>
+              {isPoolOrder ? 'Accept Order' : 'Accept Order'}
+            </Text>
+            {isPoolOrder && (
+              <Text style={styles.acceptButtonSubtext}>Pool order - no timer</Text>
+            )}
+          </TouchableOpacity>
+        </View>
       </View>
-      <Text style={styles.historyCustomer}>To: {item.customerName}</Text>
-    </View>
-  );
+    );
+  };
+
+  const renderHistoryOrder = ({ item }: { item: Order }) => {
+    console.log('📋 HISTORY ITEM (should be transformed now):', {
+      id: item.id,
+      restaurantName: item.restaurantName,
+      status: item.status,
+      driverEarning: item.driverEarning,
+      deliveredAt: item.deliveredAt,
+      createdAt: item.createdAt
+    });
+    
+    // Now that data is transformed properly, use it directly
+    const driverEarning = parseFloat(item.driverEarning?.toString() || '0');
+    const deliveryDate = item.deliveredAt ? new Date(item.deliveredAt) : new Date(item.createdAt);
+    const itemCount = item.items?.length || 0;
+    
+    return (
+      <View style={styles.historyCard}>
+        <View style={styles.historyHeader}>
+          <View style={styles.historyInfo}>
+            <Text style={styles.historyRestaurant}>{item.restaurantName}</Text>
+            <Text style={styles.historyDate}>
+              {deliveryDate.toLocaleDateString()} at {deliveryDate.toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}
+            </Text>
+          </View>
+          <View style={styles.historyStatus}>
+            <Text style={styles.historyEarnings}>${driverEarning.toFixed(2)}</Text>
+            <View style={[
+              styles.statusBadge,
+              item.status === 'DELIVERED' && styles.deliveredBadge,
+              item.status === 'delivered' && styles.deliveredBadge,
+              item.status === 'cancelled' && styles.cancelledBadge,
+            ]}>
+              <Text style={[
+                styles.statusText,
+                (item.status === 'DELIVERED' || item.status === 'delivered') && styles.deliveredText,
+                item.status === 'cancelled' && styles.cancelledText,
+              ]}>
+                {(item.status === 'DELIVERED' || item.status === 'delivered') ? 'Delivered' : 'Cancelled'}
+              </Text>
+            </View>
+          </View>
+        </View>
+        <View style={styles.historyDetailsRow}>
+          <Text style={styles.historyCustomer}>Delivered to: {item.customerName}</Text>
+          <Text style={styles.historyItems}>{itemCount} items</Text>
+        </View>
+      </View>
+    );
+  };
 
   const handleDeliveryComplete = () => {
     // When delivery is complete, switch to history tab
@@ -206,6 +347,9 @@ export const OrdersScreen: React.FC = () => {
     }
 
     if (activeTab === 'history') {
+      console.log('📋 HISTORY TAB: orderHistory length:', orderHistory?.length || 0);
+      console.log('📋 HISTORY TAB: orderHistory data:', orderHistory);
+      
       if (!orderHistory || orderHistory.length === 0) {
         return (
           <View style={styles.emptyContainer}>
@@ -214,6 +358,11 @@ export const OrdersScreen: React.FC = () => {
             <Text style={styles.emptyText}>
               Your completed orders will appear here.
             </Text>
+            <Button
+              title="Refresh History"
+              onPress={() => fetchOrderHistory()}
+              style={styles.refreshButton}
+            />
           </View>
         );
       }
@@ -510,6 +659,66 @@ const styles = StyleSheet.create({
   },
   refreshButton: {
     paddingHorizontal: Spacing.xl,
+  },
+  // New styles for improved order cards
+  orderDistance: {
+    flex: 1,
+  },
+  acceptButton: {
+    backgroundColor: Colors.primary.main,
+    paddingHorizontal: Spacing.lg,
+    paddingVertical: Spacing.sm,
+    borderRadius: 8,
+  },
+  acceptButtonText: {
+    color: 'white',
+    fontSize: Typography.fontSize.sm,
+    fontWeight: Typography.fontWeight.semibold,
+  },
+  acceptButtonSubtext: {
+    color: 'rgba(255, 255, 255, 0.8)',
+    fontSize: Typography.fontSize.xs,
+    marginTop: 2,
+  },
+  
+  // Pool Order Styles - Subtle
+  poolBadge: {
+    position: 'absolute',
+    top: 82,
+    right: 8,
+    backgroundColor: Colors.secondary.main,
+    paddingHorizontal: Spacing.sm,
+    paddingVertical: 4,
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: Colors.border.light,
+    zIndex: 1,
+  },
+  poolBadgeText: {
+    color: Colors.text.secondary,
+    fontSize: Typography.fontSize.xs,
+    fontWeight: Typography.fontWeight.medium,
+  },
+  orderNumberRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  poolTime: {
+    fontSize: Typography.fontSize.sm,
+    color: Colors.text.secondary,
+    fontStyle: 'italic',
+    marginLeft: Spacing.sm,
+  },
+  // New styles for improved history cards
+  historyDetailsRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+  },
+  historyItems: {
+    fontSize: Typography.fontSize.sm,
+    color: Colors.text.secondary,
+    fontWeight: Typography.fontWeight.medium,
   },
   errorContainer: {
     backgroundColor: Colors.status.error,
