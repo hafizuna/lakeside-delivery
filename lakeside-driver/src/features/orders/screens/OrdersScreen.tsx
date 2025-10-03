@@ -16,7 +16,7 @@ import {
   OrderRequestModal,
   ActiveOrderCard,
 } from '../components';
-import { ActiveDeliveryScreen } from './ActiveDeliveryScreen';
+import ActiveDeliveryScreen from './ActiveDeliveryScreen';
 import { Button } from '../../../components/ui';
 
 type TabType = 'available' | 'active' | 'history';
@@ -158,9 +158,15 @@ export const OrdersScreen: React.FC = () => {
     </View>
   );
 
+  const handleDeliveryComplete = () => {
+    // When delivery is complete, switch to history tab
+    // This allows the driver to see their completed delivery
+    setActiveTab('history');
+  };
+
   const renderTabContent = () => {
     if (activeTab === 'active') {
-      return <ActiveDeliveryScreen />;
+      return <ActiveDeliveryScreen onDeliveryComplete={handleDeliveryComplete} />;
     }
 
     if (activeTab === 'available') {

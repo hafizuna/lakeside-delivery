@@ -263,8 +263,17 @@ class DriverService {
   }
 
   // Cleanup service resources
-  cleanup() {
+  async cleanup() {
     console.log('🧹 Cleaning up Driver Service...');
+    
+    // Go offline before cleanup
+    if (this.state.isOnline) {
+      try {
+        await this.goOffline();
+      } catch (error) {
+        console.error('Failed to go offline during cleanup:', error);
+      }
+    }
     
     // Cleanup status change listener
     if (this.statusChangeUnsubscribe) {

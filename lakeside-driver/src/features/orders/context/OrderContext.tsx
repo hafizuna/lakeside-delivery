@@ -118,14 +118,79 @@ function orderReducer(state: OrderState, action: OrderAction): OrderState {
       };
       
     case 'UPDATE_ORDER_STATUS':
+      console.log('🔄 === UPDATE_ORDER_STATUS TRIGGERED ===');
+      console.log('Action payload orderId:', action.payload.orderId);
+      console.log('Action payload status:', action.payload.status);
+      console.log('Current activeOrder ID:', state.activeOrder?.id);
+      console.log('Current activeOrder items type:', typeof state.activeOrder?.items);
+      console.log('Current activeOrder items isArray:', Array.isArray(state.activeOrder?.items));
+      console.log('Current activeOrder items length:', state.activeOrder?.items?.length);
+      console.log('New order from API items type:', typeof action.payload.order?.items);
+      console.log('New order from API items isArray:', Array.isArray(action.payload.order?.items));
+      console.log('New order from API items length:', action.payload.order?.items?.length);
+      console.log('New order from API items:', action.payload.order?.items);
+      console.log('Will merge be called?', state.activeOrder?.id === action.payload.orderId);
+      console.log('🔄 === End UPDATE_ORDER_STATUS Debug ===');
+      
+      // Helper function to merge order data, preserving existing data when API returns incomplete data
+      const mergeOrderData = (existingOrder: Order, newOrderData?: Order) => {
+        if (!newOrderData) {
+          return { ...existingOrder, status: action.payload.status };
+        }
+        
+        console.log('=== Merge Debug ===');
+        console.log('Existing items length:', existingOrder.items?.length || 0);
+        console.log('New items length:', newOrderData.items?.length || 0);
+        console.log('New items array:', newOrderData.items);
+        console.log('=== End Merge Debug ===');
+        
+        // Check if new data has valid items (not empty array)
+        const hasValidItems = newOrderData.items && Array.isArray(newOrderData.items) && newOrderData.items.length > 0;
+        const hasValidRestaurant = newOrderData.restaurantName && newOrderData.restaurantName.trim() !== '' && newOrderData.restaurantName !== 'Unknown Restaurant';
+        const hasValidCustomer = newOrderData.customerName && newOrderData.customerName.trim() !== '' && newOrderData.customerName !== 'Unknown Customer';
+        
+        // If the new order data is missing critical fields, preserve the existing ones
+        const mergedOrder = {
+          ...existingOrder, // Start with existing order data
+          ...newOrderData,  // Overlay new data
+          // Preserve existing items if new data has empty/invalid items
+          items: hasValidItems ? newOrderData.items : (existingOrder.items || []),
+          // Preserve existing restaurant data if new data has invalid values
+          restaurantName: hasValidRestaurant ? newOrderData.restaurantName : existingOrder.restaurantName,
+          restaurantAddress: (newOrderData.restaurantAddress && newOrderData.restaurantAddress.trim() !== '' && newOrderData.restaurantAddress !== 'Unknown Address') 
+            ? newOrderData.restaurantAddress 
+            : existingOrder.restaurantAddress,
+          restaurantPhone: newOrderData.restaurantPhone || existingOrder.restaurantPhone,
+          restaurantLat: newOrderData.restaurantLat || existingOrder.restaurantLat,
+          restaurantLng: newOrderData.restaurantLng || existingOrder.restaurantLng,
+          // Preserve existing customer data if new data has invalid values
+          customerName: hasValidCustomer ? newOrderData.customerName : existingOrder.customerName,
+          customerPhone: newOrderData.customerPhone || existingOrder.customerPhone,
+          // Preserve other critical fields
+          deliveryAddress: newOrderData.deliveryAddress || existingOrder.deliveryAddress,
+          deliveryLat: newOrderData.deliveryLat || existingOrder.deliveryLat,
+          deliveryLng: newOrderData.deliveryLng || existingOrder.deliveryLng,
+          totalAmount: newOrderData.totalAmount || existingOrder.totalAmount,
+          driverEarning: newOrderData.driverEarning || existingOrder.driverEarning,
+        };
+        
+        console.log('=== Merged Order Data ===');
+        console.log('Merged items length:', mergedOrder.items?.length || 0);
+        console.log('Merged restaurant name:', mergedOrder.restaurantName);
+        console.log('Merged customer name:', mergedOrder.customerName);
+        console.log('=== End Merged Data ===');
+        
+        return mergedOrder;
+      };
+      
       return {
         ...state,
         activeOrder: state.activeOrder?.id === action.payload.orderId 
-          ? { ...state.activeOrder, status: action.payload.status, ...action.payload.order }
+          ? mergeOrderData(state.activeOrder, action.payload.order)
           : state.activeOrder,
-        availableOrders: state.availableOrders.map(order =>
+        availableOrders: (state.availableOrders || []).map(order =>
           order.id === action.payload.orderId
-            ? { ...order, status: action.payload.status, ...action.payload.order }
+            ? (action.payload.order ? mergeOrderData(order, action.payload.order) : { ...order, status: action.payload.status })
             : order
         ),
       };
@@ -138,7 +203,7 @@ function orderReducer(state: OrderState, action: OrderAction): OrderState {
         ...state,
         activeOrder: action.payload,
         assignmentOffer: null,
-        availableOrders: state.availableOrders.filter(order => order.id !== action.payload.id),
+        availableOrders: (state.availableOrders || []).filter(order => order.id !== action.payload.id),
         isLoading: false,
         error: null,
       };
@@ -146,16 +211,68 @@ function orderReducer(state: OrderState, action: OrderAction): OrderState {
     case 'DECLINE_ORDER':
       return {
         ...state,
-        availableOrders: state.availableOrders.filter(order => order.id !== action.payload.orderId),
+        availableOrders: (state.availableOrders || []).filter(order => order.id !== action.payload.orderId),
         assignmentOffer: null,
         isLoading: false,
       };
       
     case 'COMPLETE_DELIVERY':
+      console.log('📦 === COMPLETE_DELIVERY REDUCER ===');
+      console.log('Current activeOrder for history:', state.activeOrder?.id);
+      console.log('API response order:', action.payload?.id);
+      
+      // Prevent double execution - check if this order is already in history
+      // Add safety check in case orderHistory is undefined
+      console.log('DEBUG: state.orderHistory type:', typeof state.orderHistory);
+      console.log('DEBUG: state.orderHistory value:', state.orderHistory);
+      console.log('DEBUG: state.orderHistory isArray:', Array.isArray(state.orderHistory));
+      
+      const orderHistory = state.orderHistory || [];
+      console.log('DEBUG: orderHistory after fallback type:', typeof orderHistory);
+      console.log('DEBUG: orderHistory after fallback value:', orderHistory);
+      console.log('DEBUG: orderHistory after fallback isArray:', Array.isArray(orderHistory));
+      
+      // Extra safety - ensure it's definitely an array
+      const safeOrderHistory = Array.isArray(orderHistory) ? orderHistory : [];
+      console.log('DEBUG: safeOrderHistory type:', typeof safeOrderHistory);
+      console.log('DEBUG: safeOrderHistory isArray:', Array.isArray(safeOrderHistory));
+      
+      const orderAlreadyInHistory = safeOrderHistory.some(order => order.id === action.payload?.id);
+      if (orderAlreadyInHistory) {
+        console.log('⚠️ COMPLETE_DELIVERY: Order', action.payload?.id, 'already in history - skipping');
+        console.log('📦 === End COMPLETE_DELIVERY REDUCER (skipped) ===');
+        return {
+          ...state,
+          activeOrder: null, // Still set to null in case it wasn't
+          isLoading: false,
+          error: null,
+        };
+      }
+      
+      // Also check if activeOrder is null
+      if (!state.activeOrder) {
+        console.log('⚠️ COMPLETE_DELIVERY called but activeOrder is already null - skipping');
+        console.log('📦 === End COMPLETE_DELIVERY REDUCER (skipped) ===');
+        return state;
+      }
+      
+      console.log('Setting activeOrder to null');
+      
+      // Use the current activeOrder data (which has good data) instead of the API response
+      // The API response has degraded data (empty items, "Unknown" names)
+      const orderForHistory = state.activeOrder ? {
+        ...state.activeOrder,
+        status: 'DELIVERED',
+        deliveredAt: action.payload?.deliveredAt || new Date().toISOString(),
+      } : action.payload;
+      
+      console.log('Adding to history with items length:', orderForHistory?.items?.length || 0);
+      console.log('📦 === End COMPLETE_DELIVERY REDUCER ===');
+      
       return {
         ...state,
         activeOrder: null,
-        orderHistory: [action.payload, ...state.orderHistory],
+        orderHistory: [orderForHistory, ...safeOrderHistory],
         isLoading: false,
         error: null,
       };
@@ -366,18 +483,34 @@ export const OrderProvider: React.FC<OrderProviderProps> = ({ children }) => {
   // Complete Delivery
   const completeDelivery = async (orderId: number, proof?: any): Promise<boolean> => {
     try {
+      console.log('🏁 === COMPLETE DELIVERY START ===');
+      console.log('Order ID:', orderId);
+      console.log('Proof:', proof);
+      
       const response = await driverAPI.completeDelivery(orderId, proof);
       
+      console.log('Complete delivery API response:', response);
+      
       if (response.success) {
+        console.log('✅ Complete delivery SUCCESS - dispatching COMPLETE_DELIVERY');
+        console.log('Response data:', response.data);
         dispatch({ type: 'COMPLETE_DELIVERY', payload: response.data });
-        // Set driver available after completing delivery
-        await driverStatusService.setAvailable();
+        
+        // Set driver available after completing delivery (only if online)
+        const driverState = driverStatusService.getState();
+        console.log('Driver state after delivery:', driverState);
+        if (driverState.isOnline) {
+          await driverStatusService.setAvailable();
+        }
+        console.log('🏁 === COMPLETE DELIVERY END - SUCCESS ===');
         return true;
       } else {
+        console.log('❌ Complete delivery FAILED:', response.message);
         dispatch({ type: 'SET_ERROR', payload: 'Failed to complete delivery' });
         return false;
       }
     } catch (error: any) {
+      console.log('💥 Complete delivery ERROR:', error);
       dispatch({ type: 'SET_ERROR', payload: error.message || 'Network error' });
       return false;
     }

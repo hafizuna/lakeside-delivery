@@ -27,15 +27,15 @@ export const ActiveOrderCard: React.FC<ActiveOrderCardProps> = ({
       case 'accepted':
         return { text: 'Heading to Restaurant', color: Colors.primary.main, icon: '🚗' };
       case 'preparing':
-        return { text: 'Waiting at Restaurant', color: Colors.warning.main, icon: '⏱️' };
+        return { text: 'Waiting at Restaurant', color: Colors.warning, icon: '⏱️' };
       case 'ready':
-        return { text: 'Ready for Pickup', color: Colors.success.main, icon: '🛍️' };
+        return { text: 'Ready for Pickup', color: Colors.success, icon: '🛍️' };
       case 'picked_up':
         return { text: 'Order Picked Up', color: Colors.primary.main, icon: '📦' };
       case 'delivering':
         return { text: 'Delivering to Customer', color: Colors.primary.dark, icon: '🚚' };
       case 'delivered':
-        return { text: 'Delivered Successfully', color: Colors.success.main, icon: '✅' };
+        return { text: 'Delivered Successfully', color: Colors.success, icon: '✅' };
       default:
         return { text: 'Processing', color: Colors.text.secondary, icon: '📋' };
     }
@@ -179,13 +179,13 @@ const styles = StyleSheet.create({
   },
   restaurantName: {
     fontSize: Typography.fontSize.lg,
-    fontWeight: Typography.fontWeight.semibold,
+    fontWeight: Typography.fontWeight.semiBold,
     color: Colors.text.primary,
   },
   earnings: {
     fontSize: Typography.fontSize.xl,
     fontWeight: Typography.fontWeight.bold,
-    color: Colors.success.main,
+    color: Colors.success,
   },
   earningsLabel: {
     fontSize: Typography.fontSize.xs,

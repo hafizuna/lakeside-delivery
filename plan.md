@@ -2194,7 +2194,7 @@ public emitOrderStatusUpdate(orderData: OrderStatusUpdateData): void {
 
 ```typescript
 // Socket.IO 2.4.0 with React Native polyfills and optimizations
-this.socket = io("http://192.168.1.5:3001", {
+this.socket = io("http://192.168.1.2:3001", {
   transports: ["websocket", "polling"],
   timeout: 10000,
   reconnection: false, // Manual reconnection control

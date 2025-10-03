@@ -141,6 +141,7 @@ router.post('/orders/:id/accept', auth_1.authenticateToken, async (req, res) => 
             },
             data: {
                 driverId: driverId,
+                driverAssignedAt: new Date(), // Set assignment timestamp
                 // Keep existing driverEarning and deliveryCommission (already calculated)
                 estimatedPickupTime: new Date(Date.now() + 15 * 60 * 1000) // 15 minutes from now
             }
@@ -210,12 +211,41 @@ router.patch('/orders/:id/status', auth_1.authenticateToken, async (req, res) =>
         if (!driverId) {
             return res.status(401).json({ success: false, message: 'Driver not authenticated' });
         }
+        // Support special action: ARRIVE_AT_RESTAURANT (only updates timestamp, no status change)
+        if (status === 'ARRIVE_AT_RESTAURANT') {
+            // Special handling for driver arrival at restaurant
+            const currentOrder = await prisma.order.findFirst({
+                where: {
+                    id: orderId,
+                    driverId: driverId,
+                    status: { in: ['PREPARING', 'READY'] }
+                }
+            });
+            if (!currentOrder) {
+                return res.status(404).json({
+                    success: false,
+                    message: 'Order not found or not assigned to you'
+                });
+            }
+            // Update arrivedAtRestaurantAt timestamp without changing order status
+            const updatedOrder = await prisma.order.update({
+                where: { id: orderId },
+                data: {
+                    arrivedAtRestaurantAt: new Date()
+                }
+            });
+            return res.json({
+                success: true,
+                data: updatedOrder,
+                message: 'Arrival at restaurant recorded successfully'
+            });
+        }
         // Validate status
         const validStatuses = ['READY', 'PICKED_UP', 'DELIVERING', 'DELIVERED'];
         if (!validStatuses.includes(status)) {
             return res.status(400).json({
                 success: false,
-                message: `Invalid status. Allowed: ${validStatuses.join(', ')}`
+                message: `Invalid status. Allowed: ${validStatuses.join(', ')}, ARRIVE_AT_RESTAURANT`
             });
         }
         // Get current order
@@ -260,8 +290,9 @@ router.patch('/orders/:id/status', auth_1.authenticateToken, async (req, res) =>
                 updateData.paymentStatus = 'PAID';
                 break;
         }
-        // Handle DELIVERED status - credit driver earnings
+        // Handle DELIVERED status - credit driver earnings and cleanup state
         if (status === 'DELIVERED') {
+            console.log(`🏁 [DELIVERY-COMPLETE] Processing delivery completion for order ${orderId} by driver ${driverId}`);
             const result = await prisma.$transaction(async (tx) => {
                 // Update order status
                 const updatedOrder = await tx.order.update({
@@ -270,6 +301,27 @@ router.patch('/orders/:id/status', auth_1.authenticateToken, async (req, res) =>
                 });
                 // Credit driver wallet with earnings
                 const driverEarning = currentOrder.driverEarning.toNumber();
+                // Credit restaurant wallet with their share
+                const restaurantEarning = currentOrder.itemsSubtotal.toNumber() - currentOrder.restaurantCommission.toNumber();
+                console.log(`💰 [RESTAURANT-EARNING] Restaurant earning: ₹${restaurantEarning} (${currentOrder.itemsSubtotal} - ${currentOrder.restaurantCommission})`);
+                if (restaurantEarning > 0) {
+                    // Update restaurant wallet
+                    await tx.restaurantWallet.upsert({
+                        where: { restaurantId: currentOrder.restaurantId },
+                        create: {
+                            restaurantId: currentOrder.restaurantId,
+                            balance: restaurantEarning,
+                            totalEarnings: restaurantEarning,
+                            lastEarningAt: new Date()
+                        },
+                        update: {
+                            balance: { increment: restaurantEarning },
+                            totalEarnings: { increment: restaurantEarning },
+                            lastEarningAt: new Date()
+                        }
+                    });
+                    console.log(`✅ [RESTAURANT-EARNING] Restaurant wallet credited with ₹${restaurantEarning}`);
+                }
                 if (driverEarning > 0) {
                     // Update driver wallet
                     await tx.driverWallet.upsert({
@@ -297,14 +349,42 @@ router.patch('/orders/:id/status', auth_1.authenticateToken, async (req, res) =>
                             processedAt: new Date()
                         }
                     });
-                    // Update driver performance stats
+                    // Update driver performance stats and availability
                     await tx.driver.update({
                         where: { id: driverId },
                         data: {
                             totalDeliveries: { increment: 1 },
-                            lastDeliveryAt: new Date()
+                            lastDeliveryAt: new Date(),
+                            isAvailable: true // Mark driver as available again
                         }
                     });
+                    // Complete the driver assignment
+                    await tx.driverAssignment.updateMany({
+                        where: {
+                            orderId: orderId,
+                            driverId: driverId,
+                            status: 'ACCEPTED'
+                        },
+                        data: {
+                            status: 'COMPLETED'
+                        }
+                    });
+                    // Clear active assignment from driver state
+                    await tx.driverState.updateMany({
+                        where: {
+                            driverId: driverId,
+                            activeAssignmentsCount: { gt: 0 }
+                        },
+                        data: {
+                            activeAssignmentsCount: { decrement: 1 },
+                            updatedAt: new Date()
+                        }
+                    });
+                    console.log(`✅ [DELIVERY-COMPLETE] Successfully completed all database updates:`);
+                    console.log(`   - Driver isAvailable: false → true`);
+                    console.log(`   - Assignment status: ACCEPTED → COMPLETED`);
+                    console.log(`   - Active assignments count: decremented by 1`);
+                    console.log(`   - Driver earning: ₹${driverEarning} credited`);
                 }
                 return updatedOrder;
             });
@@ -362,13 +442,35 @@ router.post('/availability', auth_1.authenticateToken, async (req, res) => {
                 message: 'Driver not approved for deliveries'
             });
         }
-        // Update driver availability
-        const updatedDriver = await prisma.driver.update({
-            where: { id: driverId },
-            data: {
-                isAvailable: isAvailable,
-                onlineAt: isAvailable ? new Date() : null
-            }
+        // Update driver availability with transaction to ensure consistency
+        const updatedDriver = await prisma.$transaction(async (tx) => {
+            // Update main driver record
+            const driver = await tx.driver.update({
+                where: { id: driverId },
+                data: {
+                    isAvailable: isAvailable,
+                    onlineAt: isAvailable ? new Date() : null
+                }
+            });
+            // Also update driver state if using hybrid system
+            await tx.driverState.upsert({
+                where: { driverId: driverId },
+                create: {
+                    driverId: driverId,
+                    isOnline: isAvailable,
+                    lastHeartbeatAt: new Date(),
+                    onlineSince: isAvailable ? new Date() : null,
+                    lastLocationUpdate: new Date()
+                },
+                update: {
+                    isOnline: isAvailable,
+                    lastHeartbeatAt: new Date(),
+                    onlineSince: isAvailable ? new Date() : undefined,
+                    lastLocationUpdate: new Date(),
+                    updatedAt: new Date()
+                }
+            });
+            return driver;
         });
         res.json({
             success: true,
@@ -740,7 +842,7 @@ router.post('/approve', auth_1.authenticateToken, async (req, res) => {
 });
 /**
  * GET /api/driver/debug
- * Get driver debug information
+ * Get driver debug information including status sync
  */
 router.get('/debug', auth_1.authenticateToken, async (req, res) => {
     try {
@@ -748,17 +850,21 @@ router.get('/debug', auth_1.authenticateToken, async (req, res) => {
         if (!userId) {
             return res.status(401).json({ success: false, message: 'Not authenticated' });
         }
-        // Get user information
+        // Get user information with driver state
         const user = await prisma.user.findUnique({
             where: { id: userId },
             include: {
                 driverProfile: {
                     include: {
-                        driverWallet: true
+                        driverWallet: true,
+                        driverState: true
                     }
                 }
             }
         });
+        const now = new Date();
+        const driver = user?.driverProfile;
+        const driverState = driver?.driverState;
         res.json({
             success: true,
             debug: {
@@ -766,12 +872,25 @@ router.get('/debug', auth_1.authenticateToken, async (req, res) => {
                 userExists: !!user,
                 userRole: user?.role,
                 userStatus: user?.status,
-                hasDriverProfile: !!user?.driverProfile,
-                driverApprovalStatus: user?.driverProfile?.approvalStatus,
-                driverIsAvailable: user?.driverProfile?.isAvailable,
-                hasDriverWallet: !!user?.driverProfile?.driverWallet
+                hasDriverProfile: !!driver,
+                driverApprovalStatus: driver?.approvalStatus,
+                // Main driver table status
+                driverIsAvailable: driver?.isAvailable,
+                driverOnlineAt: driver?.onlineAt,
+                // Driver state table status (hybrid system)
+                hybridStateExists: !!driverState,
+                hybridIsOnline: driverState?.isOnline,
+                hybridOnlineSince: driverState?.onlineSince,
+                hybridLastHeartbeat: driverState?.lastHeartbeatAt,
+                // Status sync check
+                statusInSync: driver?.isAvailable === driverState?.isOnline,
+                hasDriverWallet: !!driver?.driverWallet,
+                currentTime: now.toISOString()
             },
-            data: user
+            data: {
+                user,
+                rawDriverState: driverState
+            }
         });
     }
     catch (error) {

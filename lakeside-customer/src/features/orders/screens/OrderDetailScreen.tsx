@@ -36,7 +36,7 @@ import { tokenManager } from "../../../shared/services/api";
 const escrowAPI = {
   checkCancellation: async (orderId: number) => {
     const response = await fetch(
-      `http://192.168.1.5:3001/api/escrow-orders/${orderId}/cancellation-info`,
+      `http://192.168.1.2:3001/api/escrow-orders/${orderId}/cancellation-info`,
       {
         method: "GET",
         headers: {
@@ -50,7 +50,7 @@ const escrowAPI = {
 
   cancelOrder: async (orderId: number, reason?: string) => {
     const response = await fetch(
-      `http://192.168.1.5:3001/api/escrow-orders/${orderId}/cancel`,
+      `http://192.168.1.2:3001/api/escrow-orders/${orderId}/cancel`,
       {
         method: "POST",
         headers: {

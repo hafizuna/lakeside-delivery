@@ -51,13 +51,13 @@ export const DeliveryTimer: React.FC<DeliveryTimerProps> = ({
   };
 
   const getTimerColor = (): string => {
-    if (status === 'completed') return Colors.success.main;
-    if (status === 'paused') return Colors.warning.main;
+    if (status === 'completed') return Colors.success;
+    if (status === 'paused') return Colors.warning;
     
     // Active timer color based on elapsed time
     if (elapsedTime < 600) return Colors.primary.main; // < 10 minutes - normal
-    if (elapsedTime < 1200) return Colors.warning.main; // < 20 minutes - warning
-    return Colors.status.error; // >= 20 minutes - critical
+    if (elapsedTime < 1200) return Colors.warning; // < 20 minutes - warning
+    return Colors.status.cancelled; // >= 20 minutes - critical
   };
 
   const getStatusText = (): string => {

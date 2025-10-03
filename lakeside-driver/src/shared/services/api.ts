@@ -132,6 +132,7 @@ export interface Order {
   restaurantId: number;
   restaurantName: string;
   restaurantAddress: string;
+  restaurantPhone?: string; // Add restaurant phone for calling
   restaurantLat: number;
   restaurantLng: number;
   customerId: number;
@@ -149,6 +150,11 @@ export interface Order {
   estimatedPickupTime?: Date;
   estimatedDeliveryTime?: Date;
   createdAt: Date;
+  // Delivery tracking timestamps
+  driverAssignedAt?: Date;
+  arrivedAtRestaurantAt?: Date;
+  pickedUpAt?: Date;
+  deliveredAt?: Date;
 }
 
 export interface OrderItem {
@@ -165,6 +171,61 @@ export interface DriverWallet {
   totalEarnings: number;
   collateralAmount: number;
   pendingEarnings: number;
+}
+
+// Helper function to transform backend order data to frontend Order interface
+function transformBackendOrder(backendOrder: any, fallbackStatus?: string): Order {
+  console.log('=== transformBackendOrder Debug ===');
+  console.log('Backend order ID:', backendOrder.id);
+  console.log('Backend orderItems type:', typeof backendOrder.orderItems);
+  console.log('Backend orderItems isArray:', Array.isArray(backendOrder.orderItems));
+  console.log('Backend orderItems:', backendOrder.orderItems);
+  console.log('Backend orderItems length:', backendOrder.orderItems?.length);
+  
+  const transformedItems = Array.isArray(backendOrder.orderItems) ? backendOrder.orderItems.map((item: any) => ({
+    id: item.id || 0,
+    itemName: item.menu?.itemName || 'Unknown Item',
+    quantity: item.quantity || 1,
+    price: item.price?.toNumber ? item.price.toNumber() : (item.price || 0),
+    specialInstructions: item.specialInstructions || undefined,
+  })) : [];
+  
+  console.log('Transformed items type:', typeof transformedItems);
+  console.log('Transformed items isArray:', Array.isArray(transformedItems));
+  console.log('Transformed items length:', transformedItems.length);
+  console.log('Transformed items:', transformedItems);
+  console.log('=== End transformBackendOrder Debug ===');
+  
+  return {
+    id: backendOrder.id,
+    orderNumber: `ORD-${backendOrder.id.toString().padStart(6, '0')}`,
+    restaurantId: backendOrder.restaurantId,
+    restaurantName: backendOrder.restaurant?.name || 'Unknown Restaurant',
+    restaurantAddress: backendOrder.restaurant?.address || 'Unknown Address',
+    restaurantPhone: backendOrder.restaurant?.user?.phone || null,
+    restaurantLat: backendOrder.restaurant?.lat?.toNumber ? backendOrder.restaurant.lat.toNumber() : (backendOrder.restaurant?.lat || 0),
+    restaurantLng: backendOrder.restaurant?.lng?.toNumber ? backendOrder.restaurant.lng.toNumber() : (backendOrder.restaurant?.lng || 0),
+    customerId: backendOrder.customerId,
+    customerName: backendOrder.customer?.name || 'Unknown Customer',
+    customerPhone: backendOrder.customer?.phone || '',
+    deliveryAddress: backendOrder.deliveryAddress || '',
+    deliveryLat: backendOrder.deliveryLat?.toNumber ? backendOrder.deliveryLat.toNumber() : (backendOrder.deliveryLat || 0),
+    deliveryLng: backendOrder.deliveryLng?.toNumber ? backendOrder.deliveryLng.toNumber() : (backendOrder.deliveryLng || 0),
+    items: transformedItems,
+    totalAmount: backendOrder.totalPrice?.toNumber ? backendOrder.totalPrice.toNumber() : (backendOrder.totalPrice || 0),
+    deliveryFee: backendOrder.deliveryFee?.toNumber ? backendOrder.deliveryFee.toNumber() : (backendOrder.deliveryFee || 0),
+    driverEarning: backendOrder.driverEarning?.toNumber ? backendOrder.driverEarning.toNumber() : (backendOrder.driverEarning || 0),
+    tip: 0, // Tips are usually added after delivery
+    status: backendOrder.status || fallbackStatus || 'unknown',
+    estimatedPickupTime: backendOrder.estimatedPickupTime ? new Date(backendOrder.estimatedPickupTime) : undefined,
+    estimatedDeliveryTime: backendOrder.estimatedDeliveryTime ? new Date(backendOrder.estimatedDeliveryTime) : undefined,
+    createdAt: backendOrder.createdAt ? new Date(backendOrder.createdAt) : new Date(),
+    // Preserve delivery tracking timestamps
+    driverAssignedAt: backendOrder.driverAssignedAt ? new Date(backendOrder.driverAssignedAt) : undefined,
+    arrivedAtRestaurantAt: backendOrder.arrivedAtRestaurantAt ? new Date(backendOrder.arrivedAtRestaurantAt) : undefined,
+    pickedUpAt: backendOrder.pickedUpAt ? new Date(backendOrder.pickedUpAt) : undefined,
+    deliveredAt: backendOrder.deliveredAt ? new Date(backendOrder.deliveredAt) : undefined,
+  };
 }
 
 // API Functions
@@ -208,6 +269,14 @@ export const driverAPI = {
   },
 
 
+  // Accept order assignment (uses orderId instead of assignmentId)
+  async acceptOrder(
+    orderId: number
+  ): Promise<{ success: boolean; data: Order; message: string }> {
+    const response = await api.post(`/driver/orders/${orderId}/accept`);
+    return response.data;
+  },
+
   // New hybrid assignment system endpoints
   async acceptAssignmentOffer(
     assignmentId: string
@@ -230,9 +299,9 @@ export const driverAPI = {
     state: 'online' | 'offline',
     location?: { latitude: number; longitude: number }
   ): Promise<{ success: boolean; data: any }> {
-    const response = await api.post('/driver/assignments/state', {
-      state,
-      location,
+    // Use the actual availability endpoint
+    const response = await api.post('/driver/availability', {
+      isAvailable: state === 'online',
     });
     return response.data;
   },
@@ -240,11 +309,16 @@ export const driverAPI = {
   async sendHeartbeat(
     location?: { latitude: number; longitude: number }
   ): Promise<{ success: boolean }> {
-    const response = await api.post('/driver/assignments/heartbeat', {
-      location,
-      timestamp: new Date().toISOString(),
-    });
-    return response.data;
+    // Backend doesn't have heartbeat endpoint, use location update if location provided
+    if (location) {
+      const response = await api.post('/driver/location', {
+        lat: location.latitude,
+        lng: location.longitude,
+      });
+      return response.data;
+    }
+    // If no location, just return success
+    return { success: true };
   },
 
   async getDriverDashboard(): Promise<{
@@ -299,6 +373,25 @@ export const driverAPI = {
 
   async getActiveOrder(): Promise<{ success: boolean; data: Order | null }> {
     const response = await api.get("/driver/orders/active");
+    
+    // Transform backend response to match frontend Order interface
+    if (response.data.success && response.data.data) {
+      const backendOrder = response.data.data;
+      console.log('=== API Transformation Debug ===');
+      console.log('Backend Order ID:', backendOrder.id);
+      console.log('Backend Order Items Type:', typeof backendOrder.orderItems);
+      console.log('Backend Order Items isArray:', Array.isArray(backendOrder.orderItems));
+      console.log('Backend Order Items Length:', backendOrder.orderItems?.length || 'N/A');
+      console.log('Backend Order Items:', backendOrder.orderItems);
+      console.log('=== End API Debug ===');
+      const transformedOrder = transformBackendOrder(backendOrder);
+      
+      return {
+        success: true,
+        data: transformedOrder
+      };
+    }
+    
     return response.data;
   },
 
@@ -306,30 +399,78 @@ export const driverAPI = {
     orderId: number,
     status: string
   ): Promise<{ success: boolean; data: Order }> {
-    const response = await api.put(`/driver/orders/${orderId}/status`, {
+    const response = await api.patch(`/driver/orders/${orderId}/status`, {
       status,
     });
+    
+    // Transform response if it contains order data
+    if (response.data.success && response.data.data) {
+      const backendOrder = response.data.data;
+      const transformedOrder = transformBackendOrder(backendOrder, status);
+      
+      return {
+        success: true,
+        data: transformedOrder
+      };
+    }
+    
     return response.data;
   },
 
   async arriveAtRestaurant(
     orderId: number
   ): Promise<{ success: boolean; data: Order }> {
-    const response = await api.post(`/driver/orders/${orderId}/arrive`);
+    const response = await api.patch(`/driver/orders/${orderId}/status`, {
+      status: 'ARRIVE_AT_RESTAURANT',
+    });
+    
+    // Transform response if it contains order data
+    if (response.data.success && response.data.data) {
+      const transformedOrder = transformBackendOrder(response.data.data, 'ARRIVE_AT_RESTAURANT');
+      return {
+        success: true,
+        data: transformedOrder
+      };
+    }
+    
     return response.data;
   },
 
   async pickupOrder(
     orderId: number
   ): Promise<{ success: boolean; data: Order }> {
-    const response = await api.post(`/driver/orders/${orderId}/pickup`);
+    const response = await api.patch(`/driver/orders/${orderId}/status`, {
+      status: 'PICKED_UP',
+    });
+    
+    // Transform response if it contains order data
+    if (response.data.success && response.data.data) {
+      const transformedOrder = transformBackendOrder(response.data.data, 'PICKED_UP');
+      return {
+        success: true,
+        data: transformedOrder
+      };
+    }
+    
     return response.data;
   },
 
   async startDelivery(
     orderId: number
   ): Promise<{ success: boolean; data: Order }> {
-    const response = await api.post(`/driver/orders/${orderId}/start-delivery`);
+    const response = await api.patch(`/driver/orders/${orderId}/status`, {
+      status: 'DELIVERING',
+    });
+    
+    // Transform response if it contains order data
+    if (response.data.success && response.data.data) {
+      const transformedOrder = transformBackendOrder(response.data.data, 'DELIVERING');
+      return {
+        success: true,
+        data: transformedOrder
+      };
+    }
+    
     return response.data;
   },
 
@@ -337,9 +478,20 @@ export const driverAPI = {
     orderId: number,
     proof?: any
   ): Promise<{ success: boolean; data: Order }> {
-    const response = await api.post(`/driver/orders/${orderId}/complete`, {
+    const response = await api.patch(`/driver/orders/${orderId}/status`, {
+      status: 'DELIVERED',
       proof,
     });
+    
+    // Transform response if it contains order data
+    if (response.data.success && response.data.data) {
+      const transformedOrder = transformBackendOrder(response.data.data, 'DELIVERED');
+      return {
+        success: true,
+        data: transformedOrder
+      };
+    }
+    
     return response.data;
   },
 
@@ -366,7 +518,7 @@ export const driverAPI = {
   async updateAvailability(
     isAvailable: boolean
   ): Promise<{ success: boolean; data: Driver }> {
-    const response = await api.put("/driver/availability", { isAvailable });
+    const response = await api.post("/driver/availability", { isAvailable });
     return response.data;
   },
 

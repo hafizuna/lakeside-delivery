@@ -92,7 +92,7 @@ httpServer.listen(Number(PORT), "0.0.0.0", () => {
   console.log(`🚀 Lakeside Backend running on port ${PORT}`);
   console.log(`📍 Health check: http://localhost:${PORT}/api/health`);
   console.log(`🔐 Auth endpoints: http://localhost:${PORT}/api/auth/*`);
-  console.log(`📱 Mobile access: http://192.168.1.5:${PORT}/api/auth/*`);
+  console.log(`📱 Mobile access: http://192.168.1.2:${PORT}/api/auth/*`);
   console.log(`🔌 Socket.IO server ready at ws://localhost:${PORT}`);
   console.log(`📡 Real-time updates enabled`);
 });

@@ -44,7 +44,7 @@ export interface DriverState {
 export interface OrderHybridFields {
   driverAssignedAt?: Date | null;
   readyAt?: Date | null;
-  driverArrivedAt?: Date | null;
+  arrivedAtRestaurantAt?: Date | null;
   cancelledBy?: CancelledBy | null;
   cancelReason?: CancelReason | null;
   driverCancelReason?: DriverCancelReason | null;

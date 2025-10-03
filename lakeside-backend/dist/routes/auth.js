@@ -287,14 +287,60 @@ router.get('/me', auth_1.authenticateToken, async (req, res) => {
 /**
  * POST /api/auth/logout
  * Logout (client-side token removal, server acknowledges)
+ * For drivers, also sets them offline
  */
-router.post('/logout', auth_1.authenticateToken, (req, res) => {
-    // In a stateless JWT system, logout is primarily handled client-side
-    // This endpoint can be used for logging/analytics purposes
-    res.status(200).json({
-        success: true,
-        message: 'Logged out successfully',
-    });
+router.post('/logout', auth_1.authenticateToken, async (req, res) => {
+    try {
+        const user = req.user;
+        // If the user is a driver, set them offline
+        if (user && user.role === 'DRIVER') {
+            try {
+                await database_1.default.$transaction(async (tx) => {
+                    // Set driver offline in main table
+                    await tx.driver.update({
+                        where: { id: user.id },
+                        data: {
+                            isAvailable: false,
+                            onlineAt: null
+                        }
+                    });
+                    // Also update driver state if using hybrid system
+                    await tx.driverState.upsert({
+                        where: { driverId: user.id },
+                        create: {
+                            driverId: user.id,
+                            isOnline: false,
+                            lastHeartbeatAt: new Date(),
+                            lastLocationUpdate: new Date()
+                        },
+                        update: {
+                            isOnline: false,
+                            lastHeartbeatAt: new Date(),
+                            onlineSince: null,
+                            lastLocationUpdate: new Date(),
+                            updatedAt: new Date()
+                        }
+                    });
+                });
+                console.log(`🔴 Driver ${user.id} set offline due to logout`);
+            }
+            catch (error) {
+                console.error('Failed to set driver offline on logout:', error);
+                // Don't fail the logout if driver status update fails
+            }
+        }
+        res.status(200).json({
+            success: true,
+            message: 'Logged out successfully',
+        });
+    }
+    catch (error) {
+        console.error('Logout error:', error);
+        res.status(500).json({
+            success: false,
+            message: 'Internal server error during logout',
+        });
+    }
 });
 /**
  * POST /api/auth/verify-token

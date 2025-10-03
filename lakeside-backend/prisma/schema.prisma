@@ -153,7 +153,7 @@ model Order {
   // HYBRID SYSTEM: Enhanced tracking fields
   driverAssignedAt      DateTime?       @map("driver_assigned_at")
   readyAt               DateTime?       @map("ready_at")
-  driverArrivedAt       DateTime?       @map("driver_arrived_at")
+  arrivedAtRestaurantAt DateTime?       @map("arrived_at_restaurant_at")
   cancelledBy           CancelledBy?    @map("cancelled_by")
   cancelReason          CancelReason?   @map("cancel_reason")
   driverCancelReason    DriverCancelReason? @map("driver_cancel_reason")

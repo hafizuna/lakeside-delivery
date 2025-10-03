@@ -4,7 +4,7 @@ import { Platform } from 'react-native';
 const ENDPOINTS_CONFIG = {
   // Update this IP address to match your development machine's network IP
   // For localhost/web development, it will use localhost
-  LOCAL_IP: '192.168.1.5',
+  LOCAL_IP: '192.168.1.2',
   PORT: '3001',
 };
 
